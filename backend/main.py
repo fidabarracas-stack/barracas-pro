@@ -43,7 +43,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime, date
@@ -112,8 +112,61 @@ if frontend_dir:
 #  RAIZ + SETUP
 # =============================================
 
-@app.get("/", include_in_schema=False)
-def root():
+@app.get("/setup", include_in_schema=False)
+def setup_page():
+    """Pagina para crear el primer admin desde el navegador."""
+    html = """
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Barracas Pro - Setup</title>
+        <style>
+            body { font-family: 'Segoe UI', Arial, sans-serif; background: #1a1a2e; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+            .box { background: #16213e; padding: 40px; border-radius: 12px; text-align: center; max-width: 400px; }
+            h1 { margin-bottom: 10px; }
+            p { color: #aaa; margin-bottom: 20px; }
+            button { padding: 12px 30px; background: #e94560; color: white; border: none; border-radius: 6px; font-size: 1em; cursor: pointer; width: 100%; }
+            button:hover { background: #c81e45; }
+            #result { margin-top: 15px; padding: 10px; border-radius: 6px; display: none; }
+            .success { background: #1b5e20; }
+            .error { background: #b71c1c; }
+        </style>
+    </head>
+    <body>
+        <div class="box">
+            <h1>🏗️ Barracas Pro</h1>
+            <p>Primer usuario administrador</p>
+            <button onclick="crearAdmin()">Crear Admin</button>
+            <div id="result"></div>
+        </div>
+        <script>
+            async function crearAdmin() {
+                try {
+                    const res = await fetch('/auth/setup', {method: 'POST'});
+                    const data = await res.json();
+                    const el = document.getElementById('result');
+                    el.style.display = 'block';
+                    if (res.ok) {
+                        el.className = 'success';
+                        el.innerHTML = '<strong>✅ Admin creado!</strong><br>Usuario: admin<br>Contrasena: admin123<br><br><a href="/" style="color:#4fc3f7;">Ir al login</a>';
+                    } else {
+                        el.className = 'error';
+                        el.innerHTML = '<strong>❌ Error:</strong> ' + (data.detail || data.error || 'Error desconocido');
+                    }
+                } catch(e) {
+                    const el = document.getElementById('result');
+                    el.style.display = 'block';
+                    el.className = 'error';
+                    el.innerHTML = '<strong>❌ Error de conexion</strong>';
+                }
+            }
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(html)
     """Servir el frontend en la raiz."""
     if frontend_dir:
         index_path = os.path.join(frontend_dir, "index.html")
