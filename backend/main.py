@@ -434,6 +434,8 @@ def get_asignaciones():
     return [dict(r) for r in rows]
 
 # --- Funciones de visitas ---
+
+def create_visita(barraca_id, vendedor_id, fecha_planificada=None, notas=None):
     db = get_db()
     cur = db.execute("""INSERT INTO visitas (barraca_id, vendedor_id, fecha_planificada, notas)
                         VALUES (?,?,?,?)""", (barraca_id, vendedor_id, fecha_planificada, notas))
