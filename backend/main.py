@@ -53,19 +53,6 @@ def init_db():
             whatsapp TEXT,
             youtube TEXT,
             activa INTEGER DEFAULT 1,
-            created_at TEXT DEFAULT (datetime('now'))
-        );
-        
-        -- Agregar columnas si no existen (migracion)
-        ALTER TABLE barracas ADD COLUMN web TEXT;
-        ALTER TABLE barracas ADD COLUMN facebook TEXT;
-        ALTER TABLE barracas ADD COLUMN instagram TEXT;
-        ALTER TABLE barracas ADD COLUMN twitter TEXT;
-        ALTER TABLE barracas ADD COLUMN whatsapp TEXT;
-        ALTER TABLE barracas ADD COLUMN youtube TEXT;
-            created_at TEXT DEFAULT (datetime('now'))
-        );
-        
         CREATE TABLE IF NOT EXISTS asignaciones (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             vendedor_id INTEGER NOT NULL,
