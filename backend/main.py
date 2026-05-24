@@ -53,6 +53,9 @@ def init_db():
             whatsapp TEXT,
             youtube TEXT,
             activa INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        
         CREATE TABLE IF NOT EXISTS asignaciones (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             vendedor_id INTEGER NOT NULL,
@@ -77,11 +80,12 @@ def init_db():
             FOREIGN KEY (barraca_id) REFERENCES barracas(id),
             FOREIGN KEY (vendedor_id) REFERENCES usuarios(id)
         );
-        
-        CREATE INDEX IF NOT EXISTS idx_asignaciones_vendedor ON asignaciones(vendedor_id);
-        CREATE INDEX IF NOT EXISTS idx_visitas_vendedor ON visitas(vendedor_id);
-        CREATE INDEX IF NOT EXISTS idx_visitas_barraca ON visitas(barraca_id);
     """)
+    
+    # Crear indices por separado
+    db.execute("CREATE INDEX IF NOT EXISTS idx_asignaciones_vendedor ON asignaciones(vendedor_id)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_visitas_vendedor ON visitas(vendedor_id)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_visitas_barraca ON visitas(barraca_id)")
     db.commit()
     db.close()
 
