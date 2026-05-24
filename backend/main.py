@@ -174,10 +174,10 @@ def setup_page():
                 }
                 
                 try {
-                    const res = await fetch('/admin/usuarios', {
+                    const res = await fetch('/admin/usuarios?skip_auth=1', {
                         method: 'POST',
-                        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                        body: 'skip_auth=1&username=' + encodeURIComponent(username) + '&password=' + encodeURIComponent(password) + '&nombre=' + encodeURIComponent(nombre) + '&rol=admin'
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({username, password, nombre, rol: 'admin'})
                     });
                     const data = await res.json();
                     el.style.display = 'block';
@@ -201,18 +201,37 @@ def setup_page():
 # --- Admin: gestion de usuarios ---
 
 @app.post("/admin/usuarios")
-def create_user_endpoint(data: CreateUserReq, request: Request):
-    # Permitir crear el primer admin sin auth
-    skip_auth = (request.query_params.get("skip_auth") == "1")
+async def create_user_endpoint(request: Request):
+    # Permitir crear el primer admin sin auth (desde formulario web)
+    form = await request.form()
+    skip_auth = (form.get("skip_auth") == "1" or request.query_params.get("skip_auth") == "1")
+    
     if not skip_auth:
         require_admin(request)
     
-    existing = create_user(data.username, data.password, data.nombre, data.rol)
+    username = form.get("username", "").strip()
+    password = form.get("password", "")
+    nombre = form.get("nombre", "").strip()
+    rol = form.get("rol", "vendedor")
+    
+    # Soportar tambien JSON
+    if not username:
+        try:
+            json_data = await request.json()
+            username = json_data.get("username", "").strip()
+            password = json_data.get("password", "")
+            nombre = json_data.get("nombre", "").strip()
+            rol = json_data.get("rol", "vendedor")
+        except:
+            pass
+    
+    if not username or not password or not nombre:
+        raise HTTPException(400, "Faltan campos obligatorios")
+    
+    existing = create_user(username, password, nombre, rol)
     if not existing:
-        if skip_auth:
-            return JSONResponse({"detail": "El usuario ya existe"}, status_code=400)
         raise HTTPException(400, "El usuario ya existe")
-    return {"message": "Usuario creado", "username": data.username}
+    return {"message": "Usuario creado", "username": username}
 
 @app.get("/admin/usuarios")
 def list_users_endpoint(request: Request):
