@@ -347,7 +347,13 @@ async function marcarVisitada(barracaId) {
 function initCalendario() {
     window.calendarioIniciado = true;
     const el = document.getElementById("calendario");
-
+    if (!el) return;
+    
+    // FullCalendar desactivado temporalmente por problemas de CDN
+    el.innerHTML = '<p style="color:#888;padding:40px;text-align:center;">Calendario temporalmente desactivado.<br>Las visitas se pueden gestionar desde la pestaña "Visitas".</p>';
+    return;
+    
+    /*    
     const calendar = new FullCalendar.Calendar(el, {
         initialView: "dayGridMonth",
         locale: "es",
@@ -369,6 +375,7 @@ function initCalendario() {
     });
 
     calendar.render();
+    */
 }
 
 // =============================================
