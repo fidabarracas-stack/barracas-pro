@@ -3,10 +3,8 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Instalar dependencias del sistema para criptografia
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    libffi-dev \
+    gcc libffi-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -17,4 +15,4 @@ COPY frontend/ ./frontend/
 
 EXPOSE 8000
 
-CMD ["gunicorn", "backend.main:app", "--bind", "0.0.0.0:8000", "--workers", "2", "--worker-class", "uvicorn.workers.UvicornWorker"]
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
