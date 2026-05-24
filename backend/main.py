@@ -33,8 +33,12 @@ Endpoints:
   GET /reportes/ruta-optima
 """
 
+import os
+import sys
+
 # Agregar el directorio del proyecto al PATH
 # Esto es necesario cuando se ejecuta desde gunicorn o docker
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
