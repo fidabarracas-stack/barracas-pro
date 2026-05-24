@@ -102,12 +102,47 @@ if frontend_dir:
 
 
 # =============================================
-#  RAIZ
+#  RAIZ + SETUP
 # =============================================
 
 @app.get("/")
 def root():
     return {"app": "Barracas Pro v2", "docs": "/docs"}
+
+
+@app.post("/auth/setup")
+def setup_admin(db: Session = Depends(get_db)):
+    """
+    Crear el primer admin del sistema.
+    Solo funciona si NO existe ningun usuario en la BD.
+    Despues de la primera vez, se desactiva automaticamente.
+    """
+    from models import Usuario
+    from auth import hash_password
+
+    existing = db.query(Usuario).first()
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail="Ya existe un usuario. El setup ya fue realizado."
+        )
+
+    # Crear admin por defecto
+    admin = Usuario(
+        username="admin",
+        hashed_password=hash_password("admin123"),
+        nombre_completo="Administrador",
+        rol="admin"
+    )
+    db.add(admin)
+    db.commit()
+
+    return {
+        "message": "Admin creado exitosamente",
+        "usuario": "admin",
+        "contrasena": "admin123",
+        "IMPORTANT": "Cambia esta contrasena inmediatamente despues de iniciar sesion"
+    }
 
 
 # =============================================
