@@ -62,7 +62,14 @@ function go(tab, btn) {
     const section = document.getElementById("v-" + tab);
     if (section) section.classList.add("active");
     
-    if (tab === "mapa") setTimeout(initMap, 100);
+    if (tab === "mapa") {
+        if (map) {
+            // Mapa ya existe, solo actualizar tamano
+            setTimeout(() => { map.updateSize(); }, 50);
+        } else {
+            setTimeout(initMap, 100);
+        }
+    }
     if (tab === "visitas") loadVisitas();
     if (tab === "barracas") loadBarracas();
     if (tab === "usuarios") loadUsuarios();
