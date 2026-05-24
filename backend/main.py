@@ -201,16 +201,24 @@ def scrape_cafpadu():
         page += 1
         time.sleep(0.5)
     
-    # Guardar solo el nombre basado en la URL
+    # Guardar solo el nombre basado en la URL, evitando duplicados
     saved = 0
+    skipped = 0
     for link in all_links:
-        # Extraer nombre de la URL: https://cafpadu.com.uy/listing/barraca-xxx/
         nombre = link.split("/listing/")[1].rstrip("/").replace("-", " ").title()
+        # Verificar si ya existe una barraca con este nombre
+        db = get_db()
+        existing = db.execute("SELECT id FROM barracas WHERE nombre=? AND activa=1", (nombre,)).fetchone()
+        if existing:
+            skipped += 1
+            db.close()
+            continue
+        db.close()
         data = {"nombre": nombre, "notas": link}
         create_barraca(data)
         saved += 1
     
-    return saved, len(all_links)
+    return saved, len(all_links), skipped
 
 def asignar_barraca(vendedor_id, barraca_id):
     try:
@@ -344,8 +352,8 @@ if frontend_dir:
 def importar_cafpadu(req: Request):
     require_admin(req)
     try:
-        saved, total = scrape_cafpadu()
-        return {"message": "Importacion completada", "encontradas": total, "guardadas": saved}
+        saved, total, skipped = scrape_cafpadu()
+        return {"message": "Importacion completada", "encontradas": total, "guardadas": saved, "duplicadas": skipped}
     except Exception as e:
         raise HTTPException(500, f"Error: {str(e)}")
 

@@ -454,7 +454,7 @@ async function importarCafpadu() {
         const data = await res.json();
         
         if (res.ok) {
-            statusEl.innerHTML = `✅ <strong>Importación completada</strong><br>Encontradas: ${data.encontradas}<br>Guardadas: ${data.guardadas}`;
+            statusEl.innerHTML = `✅ <strong>Importación completada</strong><br>Encontradas: ${data.encontradas}<br>Guardadas: ${data.guardadas}<br><small style="color:#aaa;">Duplicadas (saltadas): ${data.duplicadas || 0}</small>`;
             loadBarracas();
         } else {
             statusEl.innerHTML = `❌ Error: ${data.detail || "Error desconocido"}`;
