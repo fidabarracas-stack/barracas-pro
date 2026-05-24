@@ -168,7 +168,90 @@ def list_barracas(vendedor_id=None):
     db.close()
     return [dict(r) for r in rows]
 
-# --- Funciones de asignaciones ---
+# --- Importacion de barracas desde CAFPADU ---
+
+def scrape_cafpadu():
+    """Scrapear barracas de cafpadu.com.uy"""
+    import urllib.request, re, time
+    
+    base_url = "https://cafpadu.com.uy/listing-category/barracas/"
+    headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"}
+    
+    all_links = []
+    page = 1
+    
+    while True:
+        url = f"{base_url}page/{page}/" if page > 1 else base_url
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                html = resp.read().decode("utf-8", errors="ignore")
+        except:
+            break
+        
+        links = re.findall(r'href="(https://cafpadu\.com\.uy/listing/[^/"]+/)"', html)
+        if not links:
+            break
+        
+        new_links = [l for l in links if l not in all_links]
+        all_links.extend(new_links)
+        
+        if 'rel="next"' not in html:
+            break
+        page += 1
+        time.sleep(1)
+    
+    # Ahora extraer datos de cada uno
+    saved = 0
+    for link in all_links:
+        try:
+            req = urllib.request.Request(link, headers=headers)
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                html = resp.read().decode("utf-8", errors="ignore")
+        except:
+            continue
+        
+        data = {"url": link}
+        
+        title = re.search(r'<title>([^<]+)</title>', html)
+        if title:
+            nombre = title.group(1).strip()
+            nombre = re.sub(r'\s*-\s*CAFPADU\s*', '', nombre).strip()
+            data["nombre"] = nombre
+        
+        telefono = re.search(r'href="tel:([^"]+)"', html)
+        if telefono:
+            data["telefono"] = telefono.group(1).strip()
+        
+        lat = re.search(r'"latitude"\s*:\s*"?([0-9.-]+)"?', html)
+        lon = re.search(r'"longitude"\s*:\s*"?([0-9.-]+)"?', html)
+        if lat and lon:
+            try:
+                data["latitude"] = float(lat.group(1))
+                data["longitude"] = float(lon.group(1))
+            except:
+                pass
+        
+        ciudad = re.search(r'"addressLocality"\s*:\s*"([^"]+)"', html)
+        if ciudad:
+            data["ciudad"] = ciudad.group(1).strip()
+        
+        # Direccion de la pagina
+        direccion = re.search(r'class="[^"]*address[^"]*"[^>]*>([^<]+)<', html, re.I)
+        if not direccion:
+            street = re.search(r'"streetAddress"\s*:\s*"([^"]+)"', html)
+            if street:
+                direccion = street.group(1).strip()
+        if direccion:
+            data["direccion"] = direccion.strip() if hasattr(direccion, 'strip') else direccion
+        
+        if "nombre" in data:
+            create_barraca(data)
+            saved += 1
+        
+        time.sleep(0.5)
+    
+    return saved, len(all_links)
 
 def asignar_barraca(vendedor_id, barraca_id):
     try:
@@ -199,7 +282,24 @@ def get_asignaciones():
     db.close()
     return [dict(r) for r in rows]
 
-# --- Funciones de visitas ---
+# --- Endpoints de importacion ---
+
+@app.post("/admin/importar-cafpadu")
+def importar_cafpadu(req: Request):
+    require_admin(req)
+    try:
+        saved, total = scrape_cafpadu()
+        return {"message": f"Importacion completada", "encontradas": total, "guardadas": saved}
+    except Exception as e:
+        raise HTTPException(500, f"Error en importacion: {str(e)}")
+
+@app.get("/admin/importar-cafpadu/status")
+def importar_status(req: Request):
+    require_admin(req)
+    db = get_db()
+    count = db.execute("SELECT COUNT(*) as n FROM barracas WHERE activa=1").fetchone()["n"]
+    db.close()
+    return {"barracas_en_bd": count}
 
 def create_visita(barraca_id, vendedor_id, fecha_planificada=None, notas=None):
     db = get_db()

@@ -337,10 +337,14 @@ async function realizarVisita(visitaId, resultado) {
 async function loadBarracas() {
     const container = document.getElementById("v-barracas");
     container.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">
             <h2>Gestion de Barracas</h2>
-            <button class="btn btn-primary" onclick="showBarracaModal()">+ Nueva Barraca</button>
+            <div style="display:flex;gap:8px;">
+                <button class="btn btn-warning" onclick="importarCafpadu()">🌐 Importar desde CAFPADU</button>
+                <button class="btn btn-primary" onclick="showBarracaModal()">+ Nueva Barraca</button>
+            </div>
         </div>
+        <div id="import-status" style="display:none;margin-bottom:15px;padding:12px;background:#0f3460;border-radius:6px;font-size:0.9em;"></div>
         <div id="barracas-list"><p style="color:#888;">Cargando...</p></div>
     `;
     
@@ -429,6 +433,35 @@ async function deleteBarraca(id) {
         await fetch(`${API}/api/barracas/${id}`, {method: "DELETE", headers: authHeaders()});
         loadBarracas();
     } catch (e) { alert("Error eliminando"); }
+}
+
+// =============================================
+//  IMPORTACION DESDE CAFPADU
+// =============================================
+
+async function importarCafpadu() {
+    if (!confirm("¿Importar barracas desde cafpadu.com.uy?\n\nEsto puede tardar varios minutos.")) return;
+    
+    const statusEl = document.getElementById("import-status");
+    statusEl.style.display = "block";
+    statusEl.innerHTML = "⏳ Importando... Esto puede tardar varios minutos. No cierres esta página.";
+    
+    try {
+        const res = await fetch(`${API}/admin/importar-cafpadu`, {
+            method: "POST",
+            headers: authHeaders()
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+            statusEl.innerHTML = `✅ <strong>Importación completada</strong><br>Encontradas: ${data.encontradas}<br>Guardadas: ${data.guardadas}`;
+            loadBarracas();
+        } else {
+            statusEl.innerHTML = `❌ Error: ${data.detail || "Error desconocido"}`;
+        }
+    } catch (e) {
+        statusEl.innerHTML = "❌ Error de conexión. El servidor puede estar ocupado. Intentá de nuevo.";
+    }
 }
 
 // =============================================
