@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Barracas Pro - Gestion de Visitas</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#1a1a2e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@7.5.2/ol.css">
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/main.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- LOGIN -->
+    <div id="view-login" class="view active">
+        <div class="login-box">
+            <h1>🏗️ Barracas Pro</h1>
+            <p>Sistema de gestion de visitas</p>
+            <form id="login-form" onsubmit="handleLogin(event)">
+                <input type="text" id="login-user" placeholder="Usuario" required>
+                <input type="password" id="login-pass" placeholder="Contrasena" required>
+                <button type="submit">Ingresar</button>
+                <p id="login-error" class="error-msg"></p>
+            </form>
+        </div>
+    </div>
+
+    <!-- APP -->
+    <div id="view-app" class="view">
+        <header id="top-bar">
+            <span class="logo">🏗️ Barracas Pro</span>
+            <div class="header-right">
+                <span id="user-info"></span>
+                <button onclick="handleLogout()" class="btn-small">Salir</button>
+            </div>
+        </header>
+
+        <nav id="tabs">
+            <button class="tab active" onclick="switchTab('mapa',this)">🗺️ Mapa</button>
+            <button class="tab" onclick="switchTab('visitas',this)">📅 Visitas</button>
+            <button class="tab" onclick="switchTab('calendario',this)">📆 Calendario</button>
+            <button class="tab" onclick="switchTab('calculadora',this)">🧮 Calc</button>
+            <button class="tab" onclick="switchTab('reportes',this)">📊 Reportes</button>
+            <button class="tab admin-only" onclick="switchTab('admin',this)" id="tab-admin">⚙️ Admin</button>
+        </nav>
+
+        <main id="content">
+            <!-- MAPA -->
+            <section id="tab-mapa" class="tab-content active">
+                <div id="map-layout">
+                    <aside id="map-sidebar">
+                        <h3>Mis Barracas</h3>
+                        <input type="text" id="filter-city" placeholder="Filtrar ciudad..." onkeyup="filterBarracas()">
+                        <div id="barracas-list"></div>
+                    </aside>
+                    <div id="map-wrap">
+                        <div id="map"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VISITAS -->
+            <section id="tab-visitas" class="tab-content">
+                <div class="section-header">
+                    <h2>Visitas</h2>
+                    <button onclick="showVisitaForm()" class="btn-primary">+ Nueva</button>
+                </div>
+                <div id="visita-form" class="form-box" style="display:none;">
+                    <h3>Nueva Visita</h3>
+                    <select id="vf-barraca"></select>
+                    <input type="datetime-local" id="vf-fecha">
+                    <textarea id="vf-notas" rows="2" placeholder="Notas..."></textarea>
+                    <button onclick="crearVisita()" class="btn-primary">Guardar</button>
+                    <button onclick="document.getElementById('visita-form').style.display='none'">Cancelar</button>
+                </div>
+                <div id="visitas-list"></div>
+            </section>
+
+            <!-- CALENDARIO -->
+            <section id="tab-calendario" class="tab-content">
+                <div id="calendario"></div>
+            </section>
+
+            <!-- CALCULADORA -->
+            <section id="tab-calculadora" class="tab-content">
+                <h2>🧮 Calculadora de Materiales</h2>
+                <p class="hint">Ingresa las medidas y te digo cuanto pedir</p>
+
+                <label>Techo (m²):</label>
+                <input type="number" id="c-techo" placeholder="50" oninput="calcularMat()">
+                <div class="res" id="r-techo"></div>
+
+                <label>Pared (m²):</label>
+                <input type="number" id="c-pared" placeholder="30" oninput="calcularMat()">
+                <div class="res" id="r-pared"></div>
+
+                <label>Contrapiso (m³):</label>
+                <input type="number" id="c-contra" placeholder="5" oninput="calcularMat()">
+                <div class="res" id="r-contra"></div>
+
+                <label>Viga/Columna (m lineales):</label>
+                <input type="number" id="c-viga" placeholder="20" oninput="calcularMat()">
+                <div class="res" id="r-viga"></div>
+
+                <div id="calc-resumen" class="resumen-box" style="display:none;">
+                    <h4>Resumen para el cliente:</h4>
+                    <pre id="calc-resumen-texto"></pre>
+                    <button onclick="copiarResumen()" class="btn-primary">📋 Copiar</button>
+                </div>
+            </section>
+
+            <!-- REPORTES -->
+            <section id="tab-reportes" class="tab-content">
+                <h2>📊 Reportes</h2>
+                <div id="reporte-diario">
+                    <h3>Hoy</h3>
+                    <div id="rep-hoy"></div>
+                </div>
+                <div id="ruta-optima-panel">
+                    <h3>Ruta Optima del Dia</h3>
+                    <p class="hint">Selecciona barracas en el mapa y calcula la mejor ruta</p>
+                    <button onclick="calcularRutaOptima()" class="btn-primary">🗺️ Calcular Ruta</button>
+                    <div id="ruta-result"></div>
+                </div>
+            </section>
+
+            <!-- ADMIN -->
+            <section id="tab-admin" class="tab-content">
+                <h2>⚙️ Panel Admin</h2>
+
+                <div class="admin-section">
+                    <h3>Gestion de Usuarios</h3>
+                    <button onclick="showUserForm()" class="btn-primary">+ Nuevo Usuario</button>
+                    <div id="user-form" class="form-box" style="display:none;">
+                        <input type="text" id="uf-username" placeholder="Usuario">
+                        <input type="password" id="uf-password" placeholder="Contrasena">
+                        <input type="text" id="uf-nombre" placeholder="Nombre completo">
+                        <select id="uf-rol">
+                            <option value="vendedor">Vendedor</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                        <button onclick="crearUsuario()" class="btn-primary">Crear</button>
+                    </div>
+                    <div id="usuarios-list"></div>
+                </div>
+
+                <div class="admin-section">
+                    <h3>Asignar Barracas a Vendedores</h3>
+                    <div class="inline-form">
+                        <select id="asig-vendedor"></select>
+                        <select id="asig-barraca"></select>
+                        <button onclick="asignarBarracaVendedor()" class="btn-primary">Asignar</button>
+                    </div>
+                    <div id="asignaciones-list"></div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Barraca detalle modal -->
+    <div id="modal-barraca" class="modal" style="display:none;">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeModal()">&times;</span>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/ol@7.5.2/dist/ol.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
