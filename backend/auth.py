@@ -19,8 +19,8 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from .config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
-from .database import get_db
+from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
+from database import get_db
 
 # --- Configuracion ---
 
@@ -107,7 +107,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     if token_data is None:
         raise credentials_exception
 
-    from .models import Usuario
+    from models import Usuario
     user = db.query(Usuario).filter(Usuario.id == token_data.user_id).first()
     if user is None or not user.activo:
         raise credentials_exception

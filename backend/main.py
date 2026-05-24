@@ -48,20 +48,20 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime, date
 
-from .config import DATABASE_URL
-from .database import get_db, create_tables
-from .models import Usuario, Barraca
-from .schemas import (
+from config import DATABASE_URL
+from database import get_db, create_tables
+from models import Usuario, Barraca
+from schemas import (
     UsuarioCreate, UsuarioResponse, UsuarioUpdate,
     BarracaCreate, BarracaResponse, BarracaUpdate,
     VisitaCreate, VisitaUpdate, VisitaResponse,
     NotaCreate, NotaResponse,
 )
-from .auth import (
+from auth import (
     get_current_user, require_admin,
     verify_password, create_access_token, TokenResponse, LoginRequest
 )
-from .crud import (
+from crud import (
     create_usuario, get_usuario_by_username, get_usuario_by_id,
     get_usuarios, update_usuario, delete_usuario,
     create_barraca, get_barraca_by_id, get_barracas,
@@ -72,7 +72,7 @@ from .crud import (
     create_nota, get_notas,
     reporte_por_vendedor, reporte_diario,
 )
-from .services.geocoding import geocode_direccion, parse_csv_import, calcular_ruta_optima
+from services.geocoding import geocode_direccion, parse_csv_import, calcular_ruta_optima
 
 # --- App setup ---
 create_tables()
@@ -178,8 +178,8 @@ def setup_page():
 @app.post("/auth/setup")
 def setup_admin(db: Session = Depends(get_db)):
     """Crear el primer admin. Solo funciona si NO existe ningun usuario."""
-    from .models import Usuario
-    from .auth import hash_password
+    from models import Usuario
+    from auth import hash_password
     existing = db.query(Usuario).first()
     if existing:
         raise HTTPException(status_code=400, detail="Ya existe un usuario. El setup ya fue realizado.")
