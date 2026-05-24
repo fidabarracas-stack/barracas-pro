@@ -362,22 +362,41 @@ def setup_page():
     if users:
         return HTMLResponse("<html><body style='font-family:Arial;text-align:center;padding:50px;background:#1a1a2e;color:white;'><h1>⚠️ Ya configurado</h1><p><a href='/' style='color:#4fc3f7;'>Ir al login</a></p></body></html>")
     return HTMLResponse("""<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Setup</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',Arial,sans-serif;background:#1a1a2e;color:white;display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px}
-.box{background:#16213e;padding:40px;border-radius:12px;width:100%;max-width:400px}h1{margin-bottom:10px}p{color:#aaa;margin-bottom:25px}
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#1a1a2e;color:white;display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px}
+.box{background:#16213e;padding:40px;border-radius:12px;width:100%;max-width:400px}
+h1{margin-bottom:10px;font-size:1.5em}p{color:#aaa;margin-bottom:25px}
 input{width:100%;padding:10px 14px;margin-bottom:12px;border:1px solid #333;border-radius:6px;background:#0f3460;color:white;font-size:1em}
 button{width:100%;padding:12px;background:#e94560;color:white;border:none;border-radius:6px;font-size:1em;cursor:pointer}
-button:hover{background:#c81e45}#result{margin-top:15px;padding:12px;border-radius:6px;display:none;font-size:0.9em}.success{background:#1b5e20}.error{background:#b71c1c}
-</style></head><body><div class="box"><h1>🏗️ Barracas Pro</h1><p>Crear primer administrador</p>
-<input type="text" id="username" placeholder="Usuario"><input type="password" id="password" placeholder="Contrasena"><input type="text" id="nombre" placeholder="Nombre completo">
-<button onclick="crear()">Crear Admin</button><div id="result"></div></div>
+button:hover{background:#c81e45}
+#result{margin-top:15px;padding:12px;border-radius:6px;display:none;font-size:0.9em}
+.success{background:#1b5e20}.error{background:#b71c1c}
+a{color:#4fc3f7;text-decoration:none}
+</style></head><body>
+<div class="box">
+<h1>🏗️ Barracas Pro</h1><p>Crear primer administrador</p>
+<input type="text" id="username" placeholder="Usuario">
+<input type="password" id="password" placeholder="Contrasena">
+<input type="text" id="nombre" placeholder="Nombre completo">
+<button onclick="crearAdmin()">Crear Admin</button>
+<div id="result"></div>
+</div>
 <script>
-async function crear(){
-const u=document.getElementById('username').value.trim(),p=document.getElementById('password').value,n=document.getElementById('nombre').value.trim(),e=document.getElementById('result');
-if(!u||!p||!n){e.style.display='block';e.className='error';e.innerHTML='Completar todos';return}
+async function crearAdmin(){
+var u=document.getElementById('username').value.trim();
+var p=document.getElementById('password').value;
+var n=document.getElementById('nombre').value.trim();
+var e=document.getElementById('result');
+if(!u||!p||!n){e.style.display='block';e.className='error';e.innerHTML='Completar todos los campos';return;}
 try{
-const r=await fetch('/admin/usuarios?setup=1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p,nombre:n,rol:'admin'})}),d=await r.json();
-e.style.display='block';r.ok?(e.className='success',e.innerHTML='✅ Creado: <b>'+u+'</b><br>Contrasena: '+p+'<br><a href="/" style="color:#4fc3f7">Login →</a>'):(e.className='error','❌ '+(d.detail||'Error'))
-}catch{x{e.style.display='block';e.className='error';e.innerHTML='❌ Sin conexion'}}
+var r=await fetch('/admin/usuarios?setup=1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p,nombre:n,rol:'admin'})});
+var d=await r.json();
+e.style.display='block';
+if(r.ok){e.className='success';e.innerHTML='✅ Creado: <b>'+u+'</b><br>Contrasena: '+p+'<br><br><a href="/">Ir al login</a>';}
+else{e.className='error';e.innerHTML='❌ '+(d.detail||'Error');}
+}catch(err){e.style.display='block';e.className='error';e.innerHTML='❌ Error de conexion';}
+}
 </script></body></html>""")
 
 # --- Admin: usuarios ---
