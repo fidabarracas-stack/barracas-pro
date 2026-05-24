@@ -4,8 +4,8 @@ Todas las funciones reciben una sesion de BD (db: Session).
 """
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from models import Usuario, Barraca, Asignacion, Visita, Nota
-from auth import hash_password
+from .models import Usuario, Barraca, Asignacion, Visita, Nota
+from .auth import hash_password
 
 
 # =============================================
