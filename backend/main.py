@@ -112,8 +112,13 @@ if frontend_dir:
 #  RAIZ + SETUP
 # =============================================
 
-@app.get("/")
+@app.get("/", include_in_schema=False)
 def root():
+    """Servir el frontend en la raiz."""
+    if frontend_dir:
+        index_path = os.path.join(frontend_dir, "index.html")
+        if os.path.isfile(index_path):
+            return FileResponse(index_path)
     return {"app": "Barracas Pro v2", "docs": "/docs"}
 
 
