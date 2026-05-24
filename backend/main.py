@@ -241,26 +241,7 @@ def get_asignaciones():
     db.close()
     return [dict(r) for r in rows]
 
-# --- Endpoints de importacion ---
-
-@app.post("/admin/importar-cafpadu")
-def importar_cafpadu(req: Request):
-    require_admin(req)
-    try:
-        saved, total = scrape_cafpadu()
-        return {"message": f"Importacion completada", "encontradas": total, "guardadas": saved}
-    except Exception as e:
-        raise HTTPException(500, f"Error en importacion: {str(e)}")
-
-@app.get("/admin/importar-cafpadu/status")
-def importar_status(req: Request):
-    require_admin(req)
-    db = get_db()
-    count = db.execute("SELECT COUNT(*) as n FROM barracas WHERE activa=1").fetchone()["n"]
-    db.close()
-    return {"barracas_en_bd": count}
-
-def create_visita(barraca_id, vendedor_id, fecha_planificada=None, notas=None):
+# --- Funciones de visitas ---
     db = get_db()
     cur = db.execute("""INSERT INTO visitas (barraca_id, vendedor_id, fecha_planificada, notas)
                         VALUES (?,?,?,?)""", (barraca_id, vendedor_id, fecha_planificada, notas))
@@ -356,6 +337,25 @@ for d in [os.path.join(os.path.dirname(__file__), "..", "frontend"),
 
 if frontend_dir:
     app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
+
+# --- Endpoints de importacion ---
+
+@app.post("/admin/importar-cafpadu")
+def importar_cafpadu(req: Request):
+    require_admin(req)
+    try:
+        saved, total = scrape_cafpadu()
+        return {"message": "Importacion completada", "encontradas": total, "guardadas": saved}
+    except Exception as e:
+        raise HTTPException(500, f"Error: {str(e)}")
+
+@app.get("/admin/importar-cafpadu/status")
+def importar_status(req: Request):
+    require_admin(req)
+    db = get_db()
+    count = db.execute("SELECT COUNT(*) as n FROM barracas WHERE activa=1").fetchone()["n"]
+    db.close()
+    return {"barracas_en_bd": count}
 
 # --- Esquemas ---
 
