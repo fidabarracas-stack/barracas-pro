@@ -171,42 +171,44 @@ def list_barracas(vendedor_id=None):
 # --- Importacion de barracas desde CAFPADU ---
 
 def scrape_cafpadu():
-    """Scrapear lista de barracas desde cafpadu.com.uy - version simple"""
+    """Scrapear barracas de cafpadu.com.uy con detalles completos"""
     import urllib.request, re, time
     
     base_url = "https://cafpadu.com.uy/listing-category/barracas/"
-    headers = {"User-Agent": "Mozilla/5.0"}
+    headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"}
     
+    # Paso 1: Obtener links de todas las páginas
     all_links = []
     page = 1
-    
-    while page <= 10:  # Max 10 paginas
+    while page <= 20:
         url = f"{base_url}page/{page}/" if page > 1 else base_url
         try:
             req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=15) as resp:
                 html = resp.read().decode("utf-8", errors="ignore")
         except:
             break
-        
         links = re.findall(r'href="(https://cafpadu\.com\.uy/listing/[^/"]+/)"', html)
         if not links:
             break
-        
         new_links = [l for l in links if l not in all_links]
+        if not new_links:
+            break
         all_links.extend(new_links)
-        
         if 'rel="next"' not in html:
             break
         page += 1
         time.sleep(0.5)
     
-    # Guardar solo el nombre basado en la URL, evitando duplicados
+    # Paso 2: Entrar en cada barraca y extraer detalles
     saved = 0
     skipped = 0
+    errors = 0
+    
     for link in all_links:
         nombre = link.split("/listing/")[1].rstrip("/").replace("-", " ").title()
-        # Verificar si ya existe una barraca con este nombre
+        
+        # Verificar duplicado
         db = get_db()
         existing = db.execute("SELECT id FROM barracas WHERE nombre=? AND activa=1", (nombre,)).fetchone()
         if existing:
@@ -214,11 +216,114 @@ def scrape_cafpadu():
             db.close()
             continue
         db.close()
-        data = {"nombre": nombre, "notas": link}
-        create_barraca(data)
-        saved += 1
+        
+        # Scrapear detalles
+        detail = scrape_detail(link, headers)
+        if detail:
+            detail["nombre"] = nombre
+            create_barraca(detail)
+            saved += 1
+        else:
+            # Guardar al menos el nombre
+            create_barraca({"nombre": nombre, "notas": link})
+            saved += 1
+        
+        time.sleep(0.3)
     
     return saved, len(all_links), skipped
+
+def scrape_detail(url, headers):
+    """Extraer detalles de una página de barraca individual"""
+    import urllib.request, re
+    
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            html = resp.read().decode("utf-8", errors="ignore")
+    except:
+        return None
+    
+    data = {"notas": url}
+    
+    # Tipo JSON-LD (structured data)
+    jsonld = re.search(r'<script type="application/ld\+json">(.*?)</script>', html, re.S)
+    if jsonld:
+        try:
+            import json
+            ld = json.loads(jsonld.group(1))
+            if isinstance(ld, dict):
+                if "address" in ld:
+                    addr = ld["address"]
+                    if isinstance(addr, dict):
+                        parts = []
+                        if addr.get("streetAddress"): parts.append(addr["streetAddress"])
+                        if addr.get("addressLocality"): parts.append(addr["addressLocality"])
+                        if addr.get("addressRegion"): parts.append(addr["addressRegion"])
+                        data["direccion"] = ", ".join(parts)
+                        if addr.get("addressLocality"):
+                            data["ciudad"] = addr["addressLocality"]
+                        if addr.get("addressRegion"):
+                            data["departamento"] = addr["addressRegion"]
+                if "telephone" in ld:
+                    data["telefono"] = ld["telephone"]
+                if "geo" in ld and isinstance(ld["geo"], dict):
+                    if ld["geo"].get("latitude"):
+                        data["latitude"] = float(ld["geo"]["latitude"])
+                    if ld["geo"].get("longitude"):
+                        data["longitude"] = float(ld["geo"]["longitude"])
+        except:
+            pass
+    
+    # Si no se encontró por JSON-LD, buscar en el HTML
+    if not data.get("telefono"):
+        tel = re.search(r'href="tel:([^"]+)"', html)
+        if tel:
+            # Limpiar el teléfono
+            telefono = tel.group(1).strip()
+            telefono = re.sub(r'^[+]?598', '', telefono)  # Quitar prefijo Uruguay
+            data["telefono"] = telefono.strip()
+    
+    if not data.get("direccion"):
+        # Buscar dirección en diferentes formatos
+        addr_match = re.search(r'class="[^"]*listing-address[^"]*"[^>]*>(.*?)<', html, re.S | re.I)
+        if not addr_match:
+            addr_match = re.search(r'class="[^"]*address[^"]*"[^>]*>([^<]+)<', html, re.I)
+        if addr_match:
+            addr = re.sub(r'<[^>]+>', '', addr_match.group(1)).strip()
+            if addr:
+                data["direccion"] = addr
+    
+    if not data.get("ciudad"):
+        ciudad = re.search(r'"addressLocality"\s*:\s*"([^"]+)"', html)
+        if ciudad:
+            data["ciudad"] = ciudad.group(1).strip()
+    
+    if not data.get("departamento"):
+        dpto = re.search(r'"addressRegion"\s*:\s*"([^"]+)"', html)
+        if dpto:
+            data["departamento"] = dpto.group(1).strip()
+    
+    if not data.get("latitude") or not data.get("longitude"):
+        lat = re.search(r'"latitude"\s*:\s*"?([0-9.-]+)"?', html)
+        lon = re.search(r'"longitude"\s*:\s*"?([0-9.-]+)"?', html)
+        if lat and lon:
+            try:
+                data["latitude"] = float(lat.group(1))
+                data["longitude"] = float(lon.group(1))
+            except:
+                pass
+    
+    # Coordenadas de Google Maps incrustado
+    if not data.get("latitude"):
+        gmap = re.search(r'q=(-?\d+\.\d+),(-?\d+\.\d+)', html)
+        if gmap:
+            try:
+                data["latitude"] = float(gmap.group(1))
+                data["longitude"] = float(gmap.group(2))
+            except:
+                pass
+    
+    return data
 
 def asignar_barraca(vendedor_id, barraca_id):
     try:
