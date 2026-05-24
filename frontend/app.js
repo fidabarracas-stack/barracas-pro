@@ -142,31 +142,104 @@ async function loadMapBarracas() {
         const barracas = await res.json();
         
         const listEl = document.getElementById("map-barracas-list");
+        
+        // Contador de barracas con coordenadas
+        const conCoords = barracas.filter(b => b.latitude && b.longitude).length;
+        
         listEl.innerHTML = barracas.map(b => `
-            <div class="card" onclick="focusBarraca(${b.id},${b.latitude||0},${b.longitude||0})">
-                <div class="title">${b.nombre}</div>
-                <div class="subtitle">${b.ciudad || ""} ${b.telefono || ""}</div>
+            <div class="card ${b.latitude ? 'con-coords' : ''}" onclick="focusBarraca(${b.id},${b.latitude||0},${b.longitude||0})" style="cursor:pointer;${!b.latitude?'opacity:0.6;':''}">
+                <div class="title">🏗️ ${b.nombre}</div>
+                <div class="subtitle">
+                    ${b.ciudad || ""} ${b.departamento || ""}
+                    ${b.telefono ? '<br>📞 ' + b.telefono : ''}
+                    ${b.web ? '<br>🌐 ' + b.web.replace(/^https?:\/\//, '') : ''}
+                    ${b.facebook ? '<br>📘 Facebook' : ''}
+                    ${b.instagram ? '<br>📷 Instagram' : ''}
+                    ${b.whatsapp ? '<br>💬 WhatsApp' : ''}
+                    ${!b.latitude ? '<br><small style="color:#ff9800;">Sin ubicación</small>' : ''}
+                </div>
             </div>
         `).join("") || '<p style="color:#888;font-size:0.9em;">Sin barracas</p>';
         
-        // Inicializar mapa
-        if (map) return;
+        // Si hay barracas sin coordenadas, mostrar aviso
+        if (conCoords < barracas.length) {
+            listEl.innerHTML = `<div style="background:#0f3460;padding:10px;border-radius:6px;margin-bottom:10px;font-size:0.85em;">
+                📌 ${conCoords} de ${barracas.length} barracas tienen ubicación.
+                <br><small style="color:#aaa;">Editá las barracas sin coordenadas para mostrarlas en el mapa.</small>
+            </div>` + listEl.innerHTML;
+        }
         
-        markersLayer = new ol.layer.Vector({
-            source: new ol.source.Vector(),
-            style: f => {
-                const sel = f.get("selected");
-                return new ol.style.Style({
-                    image: new ol.style.Circle({radius: 8, fill: new ol.style.Fill({color: sel ? "#2196F3" : "#4caf50"}), stroke: new ol.style.Stroke({color: "#fff", width: 2})}),
-                    text: new ol.style.Text({text: f.get("name"), font: "11px sans-serif", offsetY: -14, fill: new ol.style.Fill({color: "#fff"}), stroke: new ol.style.Stroke({color: "#000", width: 3})})
+        // Inicializar mapa si no existe
+        if (!map) {
+            markersLayer = new ol.layer.Vector({
+                source: new ol.source.Vector(),
+                style: f => new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: 8,
+                        fill: new ol.style.Fill({color: f.get("selected") ? "#2196F3" : "#4caf50"}),
+                        stroke: new ol.style.Stroke({color: "#fff", width: 2})
+                    }),
+                    text: new ol.style.Text({
+                        text: f.get("name"), font: "11px sans-serif", offsetY: -14,
+                        fill: new ol.style.Fill({color: "#fff"}),
+                        stroke: new ol.style.Stroke({color: "#000", width: 3})
+                    })
+                })
+            });
+            
+            routeLayer = new ol.layer.Vector({
+                source: new ol.source.Vector(),
+                style: new ol.style.Style({stroke: new ol.style.Stroke({color: "#e94560", width: 3, lineDash: [8, 4]})})
+            });
+            
+            map = new ol.Map({
+                target: "map",
+                layers: [new ol.layer.Tile({source: new ol.source.OSM()}), routeLayer, markersLayer],
+                view: new ol.View({center: ol.proj.fromLonLat([-56.1645, -34.9011]), zoom: 12})
+            });
+            
+            // Click en marcador -> mostrar popup
+            map.on('click', evt => {
+                const feature = map.forEachFeatureAtPixel(evt.pixel, f => f);
+                if (feature) {
+                    const props = feature.getProperties();
+                    let info = `<strong>${props.name}</strong>`;
+                    if (props.ciudad) info += `<br>📍 ${props.ciudad}`;
+                    if (props.telefono) info += `<br>📞 ${props.telefono}`;
+                    if (props.web) info += `<br>🌐 <a href="${props.web}" target="_blank" style="color:#4fc3f7;">${props.web}</a>`;
+                    if (props.facebook) info += `<br>📘 <a href="${props.facebook}" target="_blank" style="color:#4fc3f7;">Facebook</a>`;
+                    if (props.instagram) info += `<br>📷 <a href="${props.instagram}" target="_blank" style="color:#4fc3f7;">Instagram</a>`;
+                    
+                    // Mostrar popup
+                    const popup = document.getElementById("map-popup");
+                    if (popup) {
+                        popup.innerHTML = info;
+                        popup.style.display = "block";
+                        popup.style.left = evt.pixel[0] + "px";
+                        popup.style.top = evt.pixel[1] + "px";
+                    }
+                }
+            });
+        
+        // Agregar marcadores
+        const source = markersLayer.getSource();
+        source.clear();
+        const extent = [];
+        barracas.forEach(b => {
+            if (b.latitude && b.longitude) {
+                const f = new ol.Feature({
+                    geometry: new ol.geom.Point(ol.proj.fromLonLat([b.longitude, b.latitude])),
+                    barracaId: b.id, name: b.nombre, selected: false,
+                    ciudad: b.ciudad, telefono: b.telefono, web: b.web,
+                    facebook: b.facebook, instagram: b.instagram
                 });
+                source.addFeature(f);
+                extent.push(ol.proj.fromLonLat([b.longitude, b.latitude]));
             }
         });
-        
-        routeLayer = new ol.layer.Vector({
-            source: new ol.source.Vector(),
-            style: new ol.style.Style({stroke: new ol.style.Stroke({color: "#e94560", width: 3, lineDash: [8, 4]})})
-        });
+        if (extent.length > 0) {
+            map.getView().fit(ol.extent.boundingExtent(extent), {padding: [40, 40, 40, 40], maxZoom: 14});
+        }
         
         map = new ol.Map({
             target: "map",
