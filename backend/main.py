@@ -554,6 +554,36 @@ def importar_status(req: Request):
     db.close()
     return {"barracas_en_bd": count}
 
+@app.post("/admin/importar-csv")
+async def importar_csv(request: Request):
+    """Importar barracas desde CSV"""
+    require_admin(request)
+    try:
+        content = await request.body()
+        text = content.decode("utf-8")
+    except:
+        raise HTTPException(400, "Error leyendo archivo")
+    import csv, io
+    reader = csv.DictReader(io.StringIO(text))
+    saved = 0
+    errors = 0
+    for row in reader:
+        try:
+            nombre = row.get("nombre", "").strip()
+            if not nombre: continue
+            db = get_db()
+            existing = db.execute("SELECT id FROM barracas WHERE nombre=? AND activa=1", (nombre,)).fetchone()
+            if existing: db.close(); continue
+            data = {"nombre": nombre, "direccion": row.get("direccion","").strip() or None, "ciudad": row.get("ciudad","").strip() or None, "departamento": row.get("departamento","").strip() or None, "telefono": row.get("telefono","").strip() or None, "contacto": row.get("contacto","").strip() or None, "web": row.get("web","").strip() or None, "facebook": row.get("facebook","").strip() or None, "instagram": row.get("instagram","").strip() or None, "twitter": row.get("twitter","").strip() or None, "whatsapp": row.get("whatsapp","").strip() or None, "youtube": row.get("youtube","").strip() or None, "notas": row.get("notas","").strip() or None}
+            try:
+                lat = row.get("latitude","").strip(); lon = row.get("longitude","").strip()
+                if lat: data["latitude"] = float(lat)
+                if lon: data["longitude"] = float(lon)
+            except: pass
+            create_barraca(data); saved += 1
+        except: errors += 1
+    return {"message": "Importacion CSV completada", "guardadas": saved, "errores": errors}
+
 # --- Esquemas ---
 
 class LoginReq(BaseModel):
