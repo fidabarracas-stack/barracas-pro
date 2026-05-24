@@ -201,9 +201,9 @@ def scrape_cafpadu():
         time.sleep(0.5)
     
     # Paso 2: Entrar en cada barraca y extraer detalles
+    # Guardar solo el nombre basado en la URL, evitando duplicados
     saved = 0
     skipped = 0
-    errors = 0
     
     for link in all_links:
         nombre = link.split("/listing/")[1].rstrip("/").replace("-", " ").title()
@@ -217,105 +217,59 @@ def scrape_cafpadu():
             continue
         db.close()
         
-        # Scrapear detalles
-        detail = scrape_detail(link, headers)
-        if detail:
-            detail["nombre"] = nombre
-            create_barraca(detail)
-            saved += 1
-        else:
-            # Guardar al menos el nombre
-            create_barraca({"nombre": nombre, "notas": link})
-            saved += 1
+        # Geocodificar para obtener coordenadas
+        lat, lon, ciudad, direccion = geocodificar_barraca(nombre)
         
-        time.sleep(0.3)
+        data = {"nombre": nombre, "notas": link}
+        if lat and lon:
+            data["latitude"] = lat
+            data["longitude"] = lon
+        if ciudad:
+            data["ciudad"] = ciudad
+        if direccion:
+            data["direccion"] = direccion
+        
+        create_barraca(data)
+        saved += 1
+        time.sleep(1.1)  # Rate limit de Nominatim
     
     return saved, len(all_links), skipped
 
-def scrape_detail(url, headers):
-    """Extraer detalles de una página de barraca individual"""
-    import urllib.request, re
+def geocodificar_barraca(nombre):
+    """Geocodificar una barraca usando Nominatim (OpenStreetMap)"""
+    import urllib.request, urllib.parse, json
+    
+    query = f"{nombre}, Uruguay"
+    url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(query)}&format=json&limit=1&countrycodes=uy"
     
     try:
-        req = urllib.request.Request(url, headers=headers)
+        req = urllib.request.Request(url, headers={"User-Agent": "BarracasPro/1.0"})
         with urllib.request.urlopen(req, timeout=10) as resp:
-            html = resp.read().decode("utf-8", errors="ignore")
+            data = json.loads(resp.read().decode())
+        
+        if data:
+            result = data[0]
+            lat = float(result["lat"])
+            lon = float(result["lon"])
+            
+            # Extraer ciudad de la direccion
+            ciudad = ""
+            direccion = ""
+            if "display_name" in result:
+                parts = result["display_name"].split(",")
+                if len(parts) >= 2:
+                    ciudad = parts[1].strip() if not parts[1].strip().isdigit() else ""
+                    direccion = parts[0].strip()
+            
+            return lat, lon, ciudad, direccion
     except:
-        return None
+        pass
     
-    data = {}
-    
-    # JSON-LD structured data
-    jsonld = re.search(r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>', html, re.S)
-    if jsonld:
-        try:
-            import json
-            ld = json.loads(jsonld.group(1))
-            # Puede ser un array o un objeto
-            if isinstance(ld, list):
-                for item in ld:
-                    if isinstance(item, dict) and item.get("@type") in ["LocalBusiness", "Store", "Place"]:
-                        ld = item
-                        break
-            if isinstance(ld, dict):
-                if "address" in ld:
-                    addr = ld["address"]
-                    if isinstance(addr, dict):
-                        parts = []
-                        if addr.get("streetAddress"): parts.append(addr["streetAddress"])
-                        if addr.get("addressLocality"): 
-                            parts.append(addr["addressLocality"])
-                            data["ciudad"] = addr["addressLocality"]
-                        if addr.get("addressRegion"): 
-                            data["departamento"] = addr["addressRegion"]
-                        if parts:
-                            data["direccion"] = ", ".join(parts)
-                if "telephone" in ld:
-                    data["telefono"] = ld["telephone"]
-                if "geo" in ld and isinstance(ld["geo"], dict):
-                    try:
-                        data["latitude"] = float(ld["geo"]["latitude"])
-                        data["longitude"] = float(ld["geo"]["longitude"])
-                    except: pass
-        except: pass
-    
-    # Telefono: buscar en links tel:
-    if not data.get("telefono"):
-        tels = re.findall(r'href="tel:([^"]+)"', html)
-        if tels:
-            # Tomar el primero y limpiar
-            tel = tels[0].strip()
-            tel = re.sub(r'\s*-\s*', ' ', tel)  # Reemplazar guiones por espacios
-            tel = re.sub(r'[^0-9\s]', '', tel)  # Solo numeros y espacios
-            data["telefono"] = ' '.join(tel.split())  # Limpiar espacios extra
-    
-    # Direccion: buscar en el HTML
-    if not data.get("direccion"):
-        # Formato 1: lp-details-address
-        addr = re.search(r'class="[^"]*lp-details-address[^"]*"[^>]*>([^<]+)<', html, re.I)
-        if not addr:
-            # Formato 2: listing-address
-            addr = re.search(r'class="[^"]*listing-address[^"]*"[^>]*>([^<]+)<', html, re.I)
-        if not addr:
-            # Formato 3: cualquier address
-            addr = re.search(r'class="[^"]*address[^"]*"[^>]*>([^<]+)<', html, re.I)
-        if addr:
-            direccion = addr.group(1).strip()
-            if direccion and len(direccion) > 5:
-                data["direccion"] = direccion
-    
-    # Coordenadas de Google Maps embebido
-    if not data.get("latitude"):
-        gmap = re.search(r'q=(-?\d+\.\d+),(-?\d+\.\d+)', html)
-        if not gmap:
-            gmap = re.search(r'center=(-?\d+\.\d+),(-?\d+\.\d+)', html)
-        if gmap:
-            try:
-                data["latitude"] = float(gmap.group(1))
-                data["longitude"] = float(gmap.group(2))
-            except: pass
-    
-    return data
+    return None, None, None, None
+
+def scrape_detail(url, headers):
+    """No se usa mas - geocodificacion con Nominatim"""
+    return None
 
 def asignar_barraca(vendedor_id, barraca_id):
     try:
