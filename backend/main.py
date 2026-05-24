@@ -46,7 +46,23 @@ def init_db():
             latitude REAL,
             longitude REAL,
             notas TEXT,
+            web TEXT,
+            facebook TEXT,
+            instagram TEXT,
+            twitter TEXT,
+            whatsapp TEXT,
+            youtube TEXT,
             activa INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        
+        -- Agregar columnas si no existen (migracion)
+        ALTER TABLE barracas ADD COLUMN web TEXT;
+        ALTER TABLE barracas ADD COLUMN facebook TEXT;
+        ALTER TABLE barracas ADD COLUMN instagram TEXT;
+        ALTER TABLE barracas ADD COLUMN twitter TEXT;
+        ALTER TABLE barracas ADD COLUMN whatsapp TEXT;
+        ALTER TABLE barracas ADD COLUMN youtube TEXT;
             created_at TEXT DEFAULT (datetime('now'))
         );
         
@@ -124,11 +140,13 @@ def list_users():
 
 def create_barraca(data):
     db = get_db()
-    cur = db.execute("""INSERT INTO barracas (nombre, direccion, ciudad, departamento, telefono, contacto, latitude, longitude, notas)
-                        VALUES (?,?,?,?,?,?,?,?,?)""",
+    cur = db.execute("""INSERT INTO barracas (nombre, direccion, ciudad, departamento, telefono, contacto, latitude, longitude, notas, web, facebook, instagram, twitter, whatsapp, youtube)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                      (data.get("nombre"), data.get("direccion"), data.get("ciudad"),
                       data.get("departamento"), data.get("telefono"), data.get("contacto"),
-                      data.get("latitude"), data.get("longitude"), data.get("notas")))
+                      data.get("latitude"), data.get("longitude"), data.get("notas"),
+                      data.get("web"), data.get("facebook"), data.get("instagram"),
+                      data.get("twitter"), data.get("whatsapp"), data.get("youtube")))
     db.commit()
     barraca_id = cur.lastrowid
     db.close()
@@ -172,7 +190,7 @@ def list_barracas(vendedor_id=None):
 
 def scrape_cafpadu():
     """Scrapear barracas de cafpadu.com.uy con detalles completos"""
-    import urllib.request, re, time
+    import urllib.request, urllib.parse, re, time, json
     
     base_url = "https://cafpadu.com.uy/listing-category/barracas/"
     headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"}
@@ -201,7 +219,6 @@ def scrape_cafpadu():
         time.sleep(0.5)
     
     # Paso 2: Entrar en cada barraca y extraer detalles
-    # Guardar solo el nombre basado en la URL, evitando duplicados
     saved = 0
     skipped = 0
     
@@ -217,26 +234,111 @@ def scrape_cafpadu():
             continue
         db.close()
         
-        # Geocodificar para obtener coordenadas
-        lat, lon, ciudad, direccion = geocodificar_barraca(nombre)
+        # Scrapear detalles de la pagina
+        detail = scrape_detail_page(link, headers)
+        detail["nombre"] = nombre
         
-        data = {"nombre": nombre, "notas": link}
-        if lat and lon:
+        create_barraca(detail)
+        saved += 1
+        time.sleep(0.5)
+    
+    return saved, len(all_links), skipped
+
+def scrape_detail_page(url, headers):
+    """Extraer detalles completos de una pagina de barraca"""
+    import urllib.request, re
+    
+    data = {}
+    
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            html = resp.read().decode("utf-8", errors="ignore")
+    except:
+        return data
+    
+    # Telefonos (puede haber varios)
+    tels = re.findall(r'href="tel:([^"]+)"', html)
+    if tels:
+        # Limpiar y unir telefonos
+        telefonos = []
+        for tel in tels:
+            tel = tel.strip()
+            # Limpiar caracteres raros
+            tel = re.sub(r'[^0-9\s\-\+\(\)]', '', tel)
+            if tel and len(tel) >= 7:
+                telefonos.append(tel)
+        if telefonos:
+            data["telefono"] = " / ".join(telefonos[:3])  # Max 3 telefonos
+    
+    # Pagina web (link externo que no sea cafpadu, facebook, etc)
+    web_match = re.search(r'href="(https?://(?!.*cafpadu|.*facebook|.*twitter|.*instagram|.*youtube|.*whatsapp|.*google\.com/maps)[^"]+)"', html)
+    if web_match:
+        web = web_match.group(1).strip("/")
+        if not any(x in web for x in ["facebook", "twitter", "instagram", "youtube", "whatsapp", "google.com/maps"]):
+            data["web"] = web
+    
+    # Facebook
+    fb = re.search(r'href="(https?://(?:www\.)?facebook\.com/[^"]+)"', html)
+    if fb:
+        fb_url = fb.group(1)
+        if "sharer" not in fb_url:
+            data["facebook"] = fb_url
+    
+    # Instagram
+    ig = re.search(r'href="(https?://(?:www\.)?instagram\.com/[^"]+)"', html)
+    if ig:
+        data["instagram"] = ig.group(1)
+    
+    # Twitter/X
+    tw = re.search(r'href="(https?://(?:www\.)?(?:twitter|x)\.com/[^"]+)"', html)
+    if tw:
+        data["twitter"] = tw.group(1)
+    
+    # WhatsApp
+    wa = re.search(r'href="(https?://(?:api\.whatsapp|wa\.me)/[^"]+)"', html)
+    if wa:
+        data["whatsapp"] = wa.group(1)
+    
+    # YouTube
+    yt = re.search(r'href="(https?://(?:www\.)?(?:youtube|youtu\.be)/[^"]+)"', html)
+    if yt:
+        data["youtube"] = yt.group(1)
+    
+    # Coordenadas de Google Maps
+    gmap = re.search(r'maps\?daddr=(-?\d+\.\d+),(-?\d+\.\d+)', html)
+    if not gmap:
+        gmap = re.search(r'q=(-?\d+\.\d+),(-?\d+\.\d+)', html)
+    if gmap:
+        try:
+            data["latitude"] = float(gmap.group(1))
+            data["longitude"] = float(gmap.group(2))
+        except:
+            pass
+    
+    # Direccion
+    if not data.get("direccion"):
+        addr = re.search(r'class="[^"]*lp-details-address[^"]*"[^>]*>([^<]+)<', html, re.I)
+        if not addr:
+            addr = re.search(r'class="[^"]*listing-address[^"]*"[^>]*>([^<]+)<', html, re.I)
+        if addr:
+            direccion = addr.group(1).strip()
+            if direccion and len(direccion) > 3:
+                data["direccion"] = direccion
+    
+    # Si no hay coordenadas, geocodificar
+    if not data.get("latitude"):
+        lat, lon, ciudad = geocodificar(nombre)
+        if lat:
             data["latitude"] = lat
             data["longitude"] = lon
         if ciudad:
             data["ciudad"] = ciudad
-        if direccion:
-            data["direccion"] = direccion
-        
-        create_barraca(data)
-        saved += 1
-        time.sleep(1.1)  # Rate limit de Nominatim
     
-    return saved, len(all_links), skipped
+    return data
 
-def geocodificar_barraca(nombre):
-    """Geocodificar una barraca usando Nominatim (OpenStreetMap)"""
+def geocodificar(nombre):
+    """Geocodificar usando Nominatim"""
     import urllib.request, urllib.parse, json
     
     query = f"{nombre}, Uruguay"
@@ -245,27 +347,19 @@ def geocodificar_barraca(nombre):
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "BarracasPro/1.0"})
         with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read().decode())
-        
-        if data:
-            result = data[0]
-            lat = float(result["lat"])
-            lon = float(result["lon"])
-            
-            # Extraer ciudad de la direccion
+            results = json.loads(resp.read().decode())
+        if results:
+            r = results[0]
             ciudad = ""
-            direccion = ""
-            if "display_name" in result:
-                parts = result["display_name"].split(",")
+            if "display_name" in r:
+                parts = r["display_name"].split(",")
                 if len(parts) >= 2:
                     ciudad = parts[1].strip() if not parts[1].strip().isdigit() else ""
-                    direccion = parts[0].strip()
-            
-            return lat, lon, ciudad, direccion
+            return float(r["lat"]), float(r["lon"]), ciudad
     except:
         pass
     
-    return None, None, None, None
+    return None, None, None
 
 def scrape_detail(url, headers):
     """No se usa mas - geocodificacion con Nominatim"""
