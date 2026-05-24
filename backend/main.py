@@ -84,8 +84,20 @@ app.add_middleware(
 )
 
 # --- Servir frontend estatico ---
-frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
-if os.path.isdir(frontend_dir):
+# Buscar el directorio frontend relativo al proyecto (no al archivo)
+_here = os.path.dirname(os.path.abspath(__file__))
+_frontend_candidates = [
+    os.path.join(_here, "..", "frontend"),    # desarrollo: backend/../frontend
+    os.path.join(_here, "frontend"),           # alternative: backend/frontend
+    os.path.join(os.getcwd(), "frontend"),     # CWD/frontend
+]
+frontend_dir = ""
+for _d in _frontend_candidates:
+    if os.path.isdir(_d) and os.path.isfile(os.path.join(_d, "index.html")):
+        frontend_dir = _d
+        break
+
+if frontend_dir:
     app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
 
 
@@ -464,14 +476,17 @@ def ruta_optima(
 
 
 # =============================================
-#  FRONTEND (SPA fallback)
+#  FRONTEND (SPA fallback) - debe ir AL FINAL
 # =============================================
 
 @app.get("/{full_path:path}", include_in_schema=False)
 def serve_frontend(full_path: str):
     """Servir el frontend SPA para cualquier ruta no-API."""
+    # No interceptar rutas de API o static
+    if full_path.startswith("api/") or full_path.startswith("auth/") or full_path.startswith("admin/") or full_path.startswith("docs") or full_path.startswith("openapi"):
+        raise HTTPException(status_code=404)
     index_path = os.path.join(frontend_dir, "index.html")
-    if os.path.isfile(index_path):
+    if frontend_dir and os.path.isfile(index_path):
         return FileResponse(index_path)
     return {"detail": "Frontend no encontrado. Accede a /docs para la API."}
 
