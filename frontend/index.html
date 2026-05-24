@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Barracas Pro - Gestion de Visitas</title>
-    <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="/static/manifest.json">
     <meta name="theme-color" content="#1a1a2e">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@7.5.2/ol.css">
     <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/main.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
@@ -87,23 +87,18 @@
             <section id="tab-calculadora" class="tab-content">
                 <h2>🧮 Calculadora de Materiales</h2>
                 <p class="hint">Ingresa las medidas y te digo cuanto pedir</p>
-
                 <label>Techo (m²):</label>
                 <input type="number" id="c-techo" placeholder="50" oninput="calcularMat()">
                 <div class="res" id="r-techo"></div>
-
                 <label>Pared (m²):</label>
                 <input type="number" id="c-pared" placeholder="30" oninput="calcularMat()">
                 <div class="res" id="r-pared"></div>
-
                 <label>Contrapiso (m³):</label>
                 <input type="number" id="c-contra" placeholder="5" oninput="calcularMat()">
                 <div class="res" id="r-contra"></div>
-
                 <label>Viga/Columna (m lineales):</label>
                 <input type="number" id="c-viga" placeholder="20" oninput="calcularMat()">
                 <div class="res" id="r-viga"></div>
-
                 <div id="calc-resumen" class="resumen-box" style="display:none;">
                     <h4>Resumen para el cliente:</h4>
                     <pre id="calc-resumen-texto"></pre>
@@ -129,7 +124,6 @@
             <!-- ADMIN -->
             <section id="tab-admin" class="tab-content">
                 <h2>⚙️ Panel Admin</h2>
-
                 <div class="admin-section">
                     <h3>Gestion de Usuarios</h3>
                     <button onclick="showUserForm()" class="btn-primary">+ Nuevo Usuario</button>
@@ -145,7 +139,6 @@
                     </div>
                     <div id="usuarios-list"></div>
                 </div>
-
                 <div class="admin-section">
                     <h3>Asignar Barracas a Vendedores</h3>
                     <div class="inline-form">
@@ -159,7 +152,7 @@
         </main>
     </div>
 
-    <!-- Barraca detalle modal -->
+    <!-- Modal -->
     <div id="modal-barraca" class="modal" style="display:none;">
         <div class="modal-content">
             <span class="modal-close" onclick="closeModal()">&times;</span>
@@ -169,6 +162,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/ol@7.5.2/dist/ol.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
-    <script src="app.js"></script>
+    <script src="/static/app.js"></script>
 </body>
 </html>
