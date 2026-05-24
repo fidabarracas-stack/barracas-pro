@@ -128,7 +128,26 @@ async function loadMapBarracas() {
         `).join("") || '<p style="color:#888;">Sin barracas</p>';
         
         if (!map) {
-            markersLayer = new ol.layer.Vector({source:new ol.source.Vector()});
+            markersLayer = new ol.layer.Vector({
+                source: new ol.source.Vector(),
+                style: function(feature) {
+                    return new ol.style.Style({
+                        image: new ol.style.Circle({
+                            radius: 8,
+                            fill: new ol.style.Fill({color: '#4caf50'}),
+                            stroke: new ol.style.Stroke({color: '#fff', width: 2})
+                        }),
+                        text: new ol.style.Text({
+                            text: feature.get('name') || '',
+                            font: 'bold 11px Segoe UI, Arial, sans-serif',
+                            offsetY: -14,
+                            fill: new ol.style.Fill({color: '#fff'}),
+                            stroke: new ol.style.Stroke({color: '#000', width: 3}),
+                            textAlign: 'center'
+                        })
+                    });
+                }
+            });
             routeLayer = new ol.layer.Vector({source:new ol.source.Vector(),style:new ol.style.Style({stroke:new ol.style.Stroke({color:"#e94560",width:3,lineDash:[8,4]})})});
             map = new ol.Map({target:"map",layers:[new ol.layer.Tile({source:new ol.source.OSM()}),routeLayer,markersLayer],view:new ol.View({center:ol.proj.fromLonLat([-56.1645,-34.9011]),zoom:12})});
         }
