@@ -243,85 +243,77 @@ def scrape_detail(url, headers):
     except:
         return None
     
-    data = {"notas": url}
+    data = {}
     
-    # Tipo JSON-LD (structured data)
-    jsonld = re.search(r'<script type="application/ld\+json">(.*?)</script>', html, re.S)
+    # JSON-LD structured data
+    jsonld = re.search(r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>', html, re.S)
     if jsonld:
         try:
             import json
             ld = json.loads(jsonld.group(1))
+            # Puede ser un array o un objeto
+            if isinstance(ld, list):
+                for item in ld:
+                    if isinstance(item, dict) and item.get("@type") in ["LocalBusiness", "Store", "Place"]:
+                        ld = item
+                        break
             if isinstance(ld, dict):
                 if "address" in ld:
                     addr = ld["address"]
                     if isinstance(addr, dict):
                         parts = []
                         if addr.get("streetAddress"): parts.append(addr["streetAddress"])
-                        if addr.get("addressLocality"): parts.append(addr["addressLocality"])
-                        if addr.get("addressRegion"): parts.append(addr["addressRegion"])
-                        data["direccion"] = ", ".join(parts)
-                        if addr.get("addressLocality"):
+                        if addr.get("addressLocality"): 
+                            parts.append(addr["addressLocality"])
                             data["ciudad"] = addr["addressLocality"]
-                        if addr.get("addressRegion"):
+                        if addr.get("addressRegion"): 
                             data["departamento"] = addr["addressRegion"]
+                        if parts:
+                            data["direccion"] = ", ".join(parts)
                 if "telephone" in ld:
                     data["telefono"] = ld["telephone"]
                 if "geo" in ld and isinstance(ld["geo"], dict):
-                    if ld["geo"].get("latitude"):
+                    try:
                         data["latitude"] = float(ld["geo"]["latitude"])
-                    if ld["geo"].get("longitude"):
                         data["longitude"] = float(ld["geo"]["longitude"])
-        except:
-            pass
+                    except: pass
+        except: pass
     
-    # Si no se encontró por JSON-LD, buscar en el HTML
+    # Telefono: buscar en links tel:
     if not data.get("telefono"):
-        tel = re.search(r'href="tel:([^"]+)"', html)
-        if tel:
-            # Limpiar el teléfono
-            telefono = tel.group(1).strip()
-            telefono = re.sub(r'^[+]?598', '', telefono)  # Quitar prefijo Uruguay
-            data["telefono"] = telefono.strip()
+        tels = re.findall(r'href="tel:([^"]+)"', html)
+        if tels:
+            # Tomar el primero y limpiar
+            tel = tels[0].strip()
+            tel = re.sub(r'\s*-\s*', ' ', tel)  # Reemplazar guiones por espacios
+            tel = re.sub(r'[^0-9\s]', '', tel)  # Solo numeros y espacios
+            data["telefono"] = ' '.join(tel.split())  # Limpiar espacios extra
     
+    # Direccion: buscar en el HTML
     if not data.get("direccion"):
-        # Buscar dirección en diferentes formatos
-        addr_match = re.search(r'class="[^"]*listing-address[^"]*"[^>]*>(.*?)<', html, re.S | re.I)
-        if not addr_match:
-            addr_match = re.search(r'class="[^"]*address[^"]*"[^>]*>([^<]+)<', html, re.I)
-        if addr_match:
-            addr = re.sub(r'<[^>]+>', '', addr_match.group(1)).strip()
-            if addr:
-                data["direccion"] = addr
+        # Formato 1: lp-details-address
+        addr = re.search(r'class="[^"]*lp-details-address[^"]*"[^>]*>([^<]+)<', html, re.I)
+        if not addr:
+            # Formato 2: listing-address
+            addr = re.search(r'class="[^"]*listing-address[^"]*"[^>]*>([^<]+)<', html, re.I)
+        if not addr:
+            # Formato 3: cualquier address
+            addr = re.search(r'class="[^"]*address[^"]*"[^>]*>([^<]+)<', html, re.I)
+        if addr:
+            direccion = addr.group(1).strip()
+            if direccion and len(direccion) > 5:
+                data["direccion"] = direccion
     
-    if not data.get("ciudad"):
-        ciudad = re.search(r'"addressLocality"\s*:\s*"([^"]+)"', html)
-        if ciudad:
-            data["ciudad"] = ciudad.group(1).strip()
-    
-    if not data.get("departamento"):
-        dpto = re.search(r'"addressRegion"\s*:\s*"([^"]+)"', html)
-        if dpto:
-            data["departamento"] = dpto.group(1).strip()
-    
-    if not data.get("latitude") or not data.get("longitude"):
-        lat = re.search(r'"latitude"\s*:\s*"?([0-9.-]+)"?', html)
-        lon = re.search(r'"longitude"\s*:\s*"?([0-9.-]+)"?', html)
-        if lat and lon:
-            try:
-                data["latitude"] = float(lat.group(1))
-                data["longitude"] = float(lon.group(1))
-            except:
-                pass
-    
-    # Coordenadas de Google Maps incrustado
+    # Coordenadas de Google Maps embebido
     if not data.get("latitude"):
         gmap = re.search(r'q=(-?\d+\.\d+),(-?\d+\.\d+)', html)
+        if not gmap:
+            gmap = re.search(r'center=(-?\d+\.\d+),(-?\d+\.\d+)', html)
         if gmap:
             try:
                 data["latitude"] = float(gmap.group(1))
                 data["longitude"] = float(gmap.group(2))
-            except:
-                pass
+            except: pass
     
     return data
 
