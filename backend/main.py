@@ -352,57 +352,9 @@ def geocodificar(nombre):
     
     return None, None, None
 
-@app.post("/admin/geocodificar-todas")
-def geocodificar_todas(req: Request):
-    """Geocodificar todas las barracas sin coordenadas"""
-    require_admin(req)
-    import urllib.request, urllib.parse, json, time
-    
-    db = get_db()
-    rows = db.execute("SELECT id, nombre, direccion, ciudad FROM barracas WHERE activa=1 AND (latitude IS NULL OR longitude IS NULL)").fetchall()
-    db.close()
-    
-    geocodificadas = 0
-    errores = 0
-    
-    for row in rows:
-        # Construir query con los datos disponibles
-        partes = [row["nombre"]]
-        if row["ciudad"]: partes.append(row["ciudad"])
-        if row["departamento"]: partes.append(row["departamento"])
-        partes.append("Uruguay")
-        query = ", ".join(partes)
-        
-        url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(query)}&format=json&limit=1&countrycodes=uy"
-        
-        try:
-            req2 = urllib.request.Request(url, headers={"User-Agent": "BarracasPro/1.0"})
-            with urllib.request.urlopen(req2, timeout=10) as resp:
-                results = json.loads(resp.read().decode())
-            
-            if results:
-                r = results[0]
-                lat = float(r["lat"])
-                lon = float(r["lon"])
-                
-                ciudad = ""
-                if "display_name" in r:
-                    parts = r["display_name"].split(",")
-                    if len(parts) >= 2:
-                        ciudad = parts[1].strip() if not parts[1].strip().isdigit() else ""
-                
-                db2 = get_db()
-                db2.execute("UPDATE barracas SET latitude=?, longitude=?, ciudad=COALESCE(NULLIF(?,''),ciudad) WHERE id=?",
-                           (lat, lon, ciudad, row["id"]))
-                db2.commit()
-                db2.close()
-                geocodificadas += 1
-        except:
-            errores += 1
-        
-        time.sleep(1.1)  # Rate limit
-    
-    return {"message": "Geocodificacion completada", "geocodificadas": geocodificadas, "errores": errores}
+def scrape_detail(url, headers):
+    """No se usa mas - geocodificacion con Nominatim"""
+    return None
 
 def asignar_barraca(vendedor_id, barraca_id):
     try:
@@ -533,6 +485,57 @@ if frontend_dir:
     app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
 
 # --- Endpoints de importacion ---
+
+@app.post("/admin/geocodificar-todas")
+def geocodificar_todas(req: Request):
+    """Geocodificar todas las barracas sin coordenadas"""
+    require_admin(req)
+    import urllib.request, urllib.parse, json, time
+    
+    db = get_db()
+    rows = db.execute("SELECT id, nombre, direccion, ciudad FROM barracas WHERE activa=1 AND (latitude IS NULL OR longitude IS NULL)").fetchall()
+    db.close()
+    
+    geocodificadas = 0
+    errores = 0
+    
+    for row in rows:
+        partes = [row["nombre"]]
+        if row["ciudad"]: partes.append(row["ciudad"])
+        if row["departamento"]: partes.append(row["departamento"])
+        partes.append("Uruguay")
+        query = ", ".join(partes)
+        
+        url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(query)}&format=json&limit=1&countrycodes=uy"
+        
+        try:
+            req2 = urllib.request.Request(url, headers={"User-Agent": "BarracasPro/1.0"})
+            with urllib.request.urlopen(req2, timeout=10) as resp:
+                results = json.loads(resp.read().decode())
+            
+            if results:
+                r = results[0]
+                lat = float(r["lat"])
+                lon = float(r["lon"])
+                
+                ciudad = ""
+                if "display_name" in r:
+                    parts = r["display_name"].split(",")
+                    if len(parts) >= 2:
+                        ciudad = parts[1].strip() if not parts[1].strip().isdigit() else ""
+                
+                db2 = get_db()
+                db2.execute("UPDATE barracas SET latitude=?, longitude=?, ciudad=COALESCE(NULLIF(?,''),ciudad) WHERE id=?",
+                           (lat, lon, ciudad, row["id"]))
+                db2.commit()
+                db2.close()
+                geocodificadas += 1
+        except:
+            errores += 1
+        
+        time.sleep(1.1)
+    
+    return {"message": "Geocodificacion completada", "geocodificadas": geocodificadas, "errores": errores}
 
 @app.post("/admin/importar-cafpadu")
 def importar_cafpadu(req: Request):
