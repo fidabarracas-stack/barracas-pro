@@ -238,7 +238,9 @@ async function geocodificarTodas(){
         const r=await fetch(`${API}/admin/geocodificar-todas`,{method:"POST",headers:authHeaders()});
         const d=await r.json();
         e.innerHTML=r.ok?`✅ Geocodificadas: ${d.geocodificadas}, Errores: ${d.errores}`:`❌ ${d.detail||"Error"}`;
-        loadBarracas();
+        // Resetear mapa y recargar con las nuevas coordenadas
+        if(map){map.dispose();map=null;markersLayer=null;routeLayer=null;}
+        setTimeout(()=>go('mapa',document.querySelectorAll("#nav button")[0]),100);
     }catch(x){e.innerHTML="❌ Error de conexion";}
 }
 
