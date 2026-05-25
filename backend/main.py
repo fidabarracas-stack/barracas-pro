@@ -203,32 +203,18 @@ def geocodificar(nombre, ciudad=""):
     return None, None, None
 
 def geocodificar_todas():
-    db = get_db()
-    cur = db.cursor()
-    rows = cur.execute("SELECT id,nombre,ciudad,departamento FROM barracas WHERE activa=true AND (latitude IS NULL OR longitude IS NULL)").fetchall()
-    db.close()
+    rows = db_fetchall("SELECT id,nombre,ciudad,departamento FROM barracas WHERE activa=true AND (latitude IS NULL OR longitude IS NULL)")
     geo, err = 0, 0
     for row in rows:
-        partes = [row["nombre"]]
-        if row["ciudad"]: partes.append(row["ciudad"])
-        if row["departamento"]: partes.append(row["departamento"])
-        partes.append("Uruguay")
-        try:
-            url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(', '.join(partes))}&format=json&limit=1&countrycodes=uy"
-            req = urllib.request.Request(url, headers={"User-Agent": "BarracasPro/1.0"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                results = json.loads(resp.read().decode())
-            if results:
-                r = results[0]
-                lat, lon = float(r["lat"]), float(r["lon"])
-                ciudad = ""
-                if "display_name" in r:
-                    parts = r["display_name"].split(",")
-                    if len(parts) >= 2: ciudad = parts[1].strip() if not parts[1].strip().isdigit() else ""
-                db2 = get_db()
-                db2.execute("UPDATE barracas SET latitude=%s,longitude=%s,ciudad=COALESCE(NULLIF(%s,''),ciudad) WHERE id=%s", (lat, lon, ciudad, row["id"]))
-                db2.commit(); db2.close(); geo += 1
-        except: err += 1
+        nombre = row.get("nombre","")
+        ciudad = row.get("ciudad","")
+        lat, lon, ciudad_resp = geocodificar(nombre, ciudad)
+        if lat:
+            db_exec("UPDATE barracas SET latitude=%s,longitude=%s,ciudad=COALESCE(NULLIF(%s,''),ciudad) WHERE id=%s",
+                   (lat, lon, ciudad_resp, row["id"]))
+            geo += 1
+        else:
+            err += 1
         time.sleep(1.1)
     return geo, err
 

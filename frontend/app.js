@@ -57,7 +57,11 @@ function go(tab, btn) {
     if (btn) btn.classList.add("active");
     const s = document.getElementById("v-" + tab);
     if (s) s.classList.add("active");
-    if (tab === "mapa") setTimeout(initMap, 100);
+    if (tab === "mapa") {
+        setTimeout(initMap, 100);
+        // Si el mapa ya existe, actualizar tamaño (puede estar oculto)
+        if(map) setTimeout(() => map.updateSize(), 200);
+    }
     if (tab === "visitas") loadVisitas();
     if (tab === "barracas") loadBarracas();
     if (tab === "usuarios") loadUsuarios();
@@ -92,6 +96,7 @@ function authHeaders() { return {"Content-Type":"application/json","Authorizatio
 
 function initMap() {
     const c = document.getElementById("v-mapa");
+    if (!c) return;
     c.innerHTML = `<div id="map-container">
         <aside id="map-sidebar">
             <h3>Mis Barracas</h3>
@@ -115,31 +120,32 @@ async function loadMapBarracas() {
         
         list.innerHTML = (conCoords < barracas.length ? 
             `<div style="background:#0f3460;padding:10px;border-radius:6px;margin-bottom:10px;font-size:0.85em;">
-                📌 ${conCoords} de ${barracas.length} tienen ubicación.
+                📌 ${conCoords} de ${barracas.length} tienen ubicación. <small style="color:#aaa;">Editá las sin coordenadas para verlas en el mapa.</small>
             </div>` : '') +
             barracas.map(b => `
             <div class="card" onclick="focusBarraca(${b.id},${b.latitude||0},${b.longitude||0})" style="cursor:pointer;${!b.latitude?'opacity:0.6;':''}">
-                <div class="title">🏗️ ${b.nombre}</div>
-                <div class="subtitle">${b.ciudad||""} ${b.telefono?('📞 '+b.telefono):""}</div>
+                <div class="title">${b.nombre}</div>
+                <div class="subtitle">${b.ciudad||""}<br>${b.telefono||""} ${b.web?b.web.replace(/^https?:\/\//,''):""}</div>
             </div>
         `).join("") || '<p style="color:#888;">Sin barracas</p>';
         
-        if (!map) {
-            markersLayer = new ol.layer.Vector({
-                source: new ol.source.Vector(),
-                style: function(feature) {
-                    return new ol.style.Style({
-                        image: new ol.style.Circle({radius:8,fill:new ol.style.Fill({color:'#4caf50'}),stroke:new ol.style.Stroke({color:'#fff',width:2})}),
-                        text: new ol.style.Text({text:feature.get('name')||'',font:'bold 11px Segoe UI,Arial,sans-serif',offsetY:-14,fill:new ol.style.Fill({color:'#fff'}),stroke:new ol.style.Stroke({color:'#000',width:3})})
-                    });
-                }
-            });
-            routeLayer = new ol.layer.Vector({source:new ol.source.Vector(),style:new ol.style.Style({stroke:new ol.style.Stroke({color:"#e94560",width:3,lineDash:[8,4]})})});
-            map = new ol.Map({target:"map",layers:[new ol.layer.Tile({source:new ol.source.OSM()}),routeLayer,markersLayer],view:new ol.View({center:ol.proj.fromLonLat([-56.1645,-34.9011]),zoom:12})});
-        }
+        // Resetear mapa si existe
+        if (map) { map.dispose(); map = null; markersLayer = null; routeLayer = null; }
+        
+        markersLayer = new ol.layer.Vector({
+            source: new ol.source.Vector(),
+            style: function(feature) {
+                return new ol.style.Style({
+                    image: new ol.style.Circle({radius:8,fill:new ol.style.Fill({color:'#4caf50'}),stroke:new ol.style.Stroke({color:'#fff',width:2})}),
+                    text: new ol.style.Text({text:feature.get('name')||'',font:'bold 11px Segoe UI,Arial,sans-serif',offsetY:-14,fill:new ol.style.Fill({color:'#fff'}),stroke:new ol.style.Stroke({color:'#000',width:3})})
+                });
+            }
+        });
+        routeLayer = new ol.layer.Vector({source:new ol.source.Vector(),style:new ol.style.Style({stroke:new ol.style.Stroke({color:"#e94560",width:3,lineDash:[8,4]})})});
+        map = new ol.Map({target:"map",layers:[new ol.layer.Tile({source:new ol.source.OSM()}),routeLayer,markersLayer],view:new ol.View({center:ol.proj.fromLonLat([-56.1645,-34.9011]),zoom:12})});
+        setTimeout(() => map.updateSize(), 50);
         
         const source = markersLayer.getSource();
-        source.clear();
         const extent = [];
         barracas.forEach(b => {
             if (b.latitude && b.longitude) {
