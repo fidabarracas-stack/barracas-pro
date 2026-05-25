@@ -226,37 +226,34 @@ def scrape_cafpadu():
     base_url = "https://cafpadu.com.uy/listing-category/barracas/"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
-        "Accept-Encoding": "identity",
-        "Connection": "keep-alive",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "es-ES,es;q=0.9",
     }
     all_links, page = [], 1
-    while page <= 20:
-        url = f"{base_url}page/{page}/" if page > 1 else base_url
-        try:
+    try:
+        while page <= 20:
+            url = f"{base_url}page/{page}/" if page > 1 else base_url
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=20) as resp:
                 html = resp.read().decode("utf-8", errors="ignore")
-        except Exception as e:
-            print(f"  Error pagina {page}: {e}")
-            break
-        links = re.findall(r'href="(https://cafpadu\.com\.uy/listing/[^/"]+/)"', html)
-        if not links: break
-        new_links = [l for l in links if l not in all_links]
-        if not new_links: break
-        all_links.extend(new_links)
-        if 'rel="next"' not in html: break
-        page += 1
-        time.sleep(1)
+            links = re.findall(r'href="(https://cafpadu\.com\.uy/listing/[^/"]+/)"', html)
+            if not links: break
+            new_links = [l for l in links if l not in all_links]
+            if not new_links: break
+            all_links.extend(new_links)
+            if 'rel="next"' not in html: break
+            page += 1
+            time.sleep(1)
+    except Exception as e:
+        # Si no se puede conectar, retornar error
+        if not all_links:
+            raise HTTPException(500, f"No se pudo conectar con CAFPADU: {str(e)}")
     
     saved, skipped = 0, 0
     for link in all_links:
         nombre = link.split("/listing/")[1].rstrip("/").replace("-", " ").title()
         existing = db_fetchone("SELECT id FROM barracas WHERE nombre=%s AND activa=true", (nombre,))
-        if existing:
-            skipped += 1
-            continue
+        if existing: skipped += 1; continue
         detail = scrape_detail_page(link, headers)
         detail["nombre"] = nombre
         create_barraca(detail)
@@ -424,8 +421,13 @@ def admin_list_users(req: Request):
 @app.post("/admin/importar-cafpadu")
 def admin_import_cafpadu(req: Request):
     require_admin(req)
-    saved, total, skipped = scrape_cafpadu()
-    return {"message":"Completada","encontradas":total,"guardadas":saved,"duplicadas":skipped}
+    try:
+        saved, total, skipped = scrape_cafpadu()
+        return {"message":"Completada","encontradas":total,"guardadas":saved,"duplicadas":skipped}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Error en importacion: {str(e)}")
 
 @app.post("/admin/geocodificar-todas")
 def admin_geocodificar(req: Request):
