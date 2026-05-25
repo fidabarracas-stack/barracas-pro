@@ -22,7 +22,9 @@ def get_db():
 
 def init_db():
     db = get_db()
-    db.execute("""
+    cur = db.cursor()
+    cur = db.cursor()
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS usuarios (id SERIAL PRIMARY KEY, username VARCHAR(80) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL, nombre VARCHAR(150) NOT NULL, rol VARCHAR(20) DEFAULT 'vendedor', activo BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT now());
         CREATE TABLE IF NOT EXISTS barracas (id SERIAL PRIMARY KEY, nombre VARCHAR(200) NOT NULL, direccion VARCHAR(300), ciudad VARCHAR(100), departamento VARCHAR(50), telefono VARCHAR(50), contacto VARCHAR(150), web VARCHAR(300), facebook VARCHAR(300), instagram VARCHAR(300), twitter VARCHAR(300), whatsapp VARCHAR(300), youtube VARCHAR(300), notas TEXT, latitude DOUBLE PRECISION, longitude DOUBLE PRECISION, activa BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT now());
         CREATE TABLE IF NOT EXISTS asignaciones (id SERIAL PRIMARY KEY, vendedor_id INTEGER REFERENCES usuarios(id), barraca_id INTEGER REFERENCES barracas(id), created_at TIMESTAMPTZ DEFAULT now(), UNIQUE(vendedor_id, barraca_id));
@@ -37,42 +39,66 @@ def init_db():
 #  USUARIOS
 # =============================================
 
-def create_user(username, password, nombre, rol="vendedor"):
-    try:
-        db = get_db()
-        db.execute("INSERT INTO usuarios (username,password_hash,nombre,rol) VALUES (%s,%s,%s,%s)",
-                   (username, hashlib.sha256(password.encode()).hexdigest(), nombre, rol))
-        db.commit(); db.close(); return True
-    except psycopg2.IntegrityError: return False
-
-def verify_user(username, password):
+def db_exec(query, params=()):
+    """Execute a query and commit"""
     db = get_db()
-    row = db.execute("SELECT * FROM usuarios WHERE username=%s AND password_hash=%s AND activo=true",
-                     (username, hashlib.sha256(password.encode()).hexdigest())).fetchone()
+    cur = db.cursor()
+    cur.execute(query, params)
+    db.commit()
+    db.close()
+
+def db_fetchone(query, params=()):
+    """Execute and return one row"""
+    db = get_db()
+    cur = db.cursor()
+    cur.execute(query, params)
+    row = cur.fetchone()
     db.close()
     return dict(row) if row else None
 
-def get_user_by_id(uid):
+def db_fetchall(query, params=()):
+    """Execute and return all rows"""
     db = get_db()
-    row = db.execute("SELECT * FROM usuarios WHERE id=%s", (uid,)).fetchone()
-    db.close()
-    return dict(row) if row else None
-
-def list_users():
-    db = get_db()
-    rows = db.execute("SELECT id,username,nombre,rol,activo FROM usuarios ORDER BY nombre").fetchall()
+    cur = db.cursor()
+    cur.execute(query, params)
+    rows = cur.fetchall()
     db.close()
     return [dict(r) for r in rows]
+
+def db_insert(query, params=()):
+    """Execute INSERT and return id"""
+    db = get_db()
+    cur = db.cursor()
+    cur.execute(query, params)
+    result = cur.fetchone()
+    db.commit()
+    db.close()
+    return result["id"] if result else None
+
+def create_user(username, password, nombre, rol="vendedor"):
+    try:
+        return db_insert("INSERT INTO usuarios (username,password_hash,nombre,rol) VALUES (%s,%s,%s,%s) RETURNING id",
+                         (username, hashlib.sha256(password.encode()).hexdigest(), nombre, rol))
+    except psycopg2.IntegrityError:
+        return None
+
+def verify_user(username, password):
+    return db_fetchone("SELECT * FROM usuarios WHERE username=%s AND password_hash=%s AND activo=true",
+                       (username, hashlib.sha256(password.encode()).hexdigest()))
+
+def get_user_by_id(uid):
+    return db_fetchone("SELECT * FROM usuarios WHERE id=%s", (uid,))
+
+def list_users():
+    return db_fetchall("SELECT id,username,nombre,rol,activo FROM usuarios ORDER BY nombre")
 
 # =============================================
 #  BARRACAS
 # =============================================
 
 def create_barraca(data):
-    db = get_db()
-    cur = db.execute("INSERT INTO barracas (nombre,direccion,ciudad,departamento,telefono,contacto,latitude,longitude,notas,web,facebook,instagram,twitter,whatsapp,youtube) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+    return db_insert("""INSERT INTO barracas (nombre,direccion,ciudad,departamento,telefono,contacto,latitude,longitude,notas,web,facebook,instagram,twitter,whatsapp,youtube) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
                      (data.get("nombre"),data.get("direccion"),data.get("ciudad"),data.get("departamento"),data.get("telefono"),data.get("contacto"),data.get("latitude"),data.get("longitude"),data.get("notas"),data.get("web"),data.get("facebook"),data.get("instagram"),data.get("twitter"),data.get("whatsapp"),data.get("youtube")))
-    bid = cur.fetchone()["id"]; db.commit(); db.close(); return bid
 
 def update_barraca(bid, data):
     fields, values = [], []
@@ -80,27 +106,19 @@ def update_barraca(bid, data):
         if k in data: fields.append(f"{k}=%s"); values.append(data[k])
     if not fields: return False
     values.append(bid)
-    db = get_db()
-    db.execute(f"UPDATE barracas SET {','.join(fields)} WHERE id=%s", values)
-    db.commit(); db.close(); return True
+    db_exec(f"UPDATE barracas SET {','.join(fields)} WHERE id=%s", values)
+    return True
 
 def get_barraca(bid):
-    db = get_db()
-    row = db.execute("SELECT * FROM barracas WHERE id=%s AND activa=true", (bid,)).fetchone()
-    db.close()
-    return dict(row) if row else None
+    return db_fetchone("SELECT * FROM barracas WHERE id=%s AND activa=true", (bid,))
 
 def list_barracas(vendedor_id=None):
-    db = get_db()
     if vendedor_id:
-        rows = db.execute("SELECT b.* FROM barracas b JOIN asignaciones a ON a.barraca_id=b.id WHERE b.activa=true AND a.vendedor_id=%s ORDER BY b.nombre", (vendedor_id,)).fetchall()
-    else:
-        rows = db.execute("SELECT * FROM barracas WHERE activa=true ORDER BY nombre").fetchall()
-    db.close()
-    return [dict(r) for r in rows]
+        return db_fetchall("SELECT b.* FROM barracas b JOIN asignaciones a ON a.barraca_id=b.id WHERE b.activa=true AND a.vendedor_id=%s ORDER BY b.nombre", (vendedor_id,))
+    return db_fetchall("SELECT * FROM barracas WHERE activa=true ORDER BY nombre")
 
 def delete_barraca_db(bid):
-    db = get_db(); db.execute("UPDATE barracas SET activa=false WHERE id=%s", (bid,)); db.commit(); db.close()
+    db_exec("UPDATE barracas SET activa=false WHERE id=%s", (bid,))
 
 # =============================================
 #  ASIGNACIONES
@@ -108,36 +126,27 @@ def delete_barraca_db(bid):
 
 def asignar_barraca(vid, bid):
     try:
-        db = get_db()
-        db.execute("INSERT INTO asignaciones (vendedor_id,barraca_id) VALUES (%s,%s) ON CONFLICT DO NOTHING", (vid, bid))
-        db.commit(); db.close(); return True
+        db_exec("INSERT INTO asignaciones (vendedor_id,barraca_id) VALUES (%s,%s) ON CONFLICT DO NOTHING", (vid, bid))
+        return True
     except: return False
 
 def desasignar_barraca(vid, bid):
-    db = get_db(); db.execute("DELETE FROM asignaciones WHERE vendedor_id=%s AND barraca_id=%s", (vid, bid)); db.commit(); db.close()
+    db_exec("DELETE FROM asignaciones WHERE vendedor_id=%s AND barraca_id=%s", (vid, bid))
 
 def get_asignaciones():
-    db = get_db()
-    rows = db.execute("SELECT a.id,a.vendedor_id,u.nombre as vendedor_nombre,a.barraca_id,b.nombre as barraca_nombre FROM asignaciones a JOIN usuarios u ON u.id=a.vendedor_id JOIN barracas b ON b.id=a.barraca_id WHERE b.activa=true ORDER BY u.nombre,b.nombre").fetchall()
-    db.close()
-    return [dict(r) for r in rows]
+    return db_fetchall("SELECT a.id,a.vendedor_id,u.nombre as vendedor_nombre,a.barraca_id,b.nombre as barraca_nombre FROM asignaciones a JOIN usuarios u ON u.id=a.vendedor_id JOIN barracas b ON b.id=a.barraca_id WHERE b.activa=true ORDER BY u.nombre,b.nombre")
 
 # =============================================
 #  VISITAS
 # =============================================
 
 def create_visita(bid, vid, fecha=None, notas=None):
-    db = get_db()
-    cur = db.execute("INSERT INTO visitas (barraca_id,vendedor_id,fecha_planificada,notas) VALUES (%s,%s,%s,%s) RETURNING id", (bid, vid, fecha, notas))
-    vid2 = cur.fetchone()["id"]; db.commit(); db.close(); return vid2
+    return db_insert("INSERT INTO visitas (barraca_id,vendedor_id,fecha_planificada,notas) VALUES (%s,%s,%s,%s) RETURNING id", (bid, vid, fecha, notas))
 
 def registrar_visita(vid, resultado, monto=None, notas=None):
-    db = get_db()
-    db.execute("UPDATE visitas SET estado='realizada',fecha_realizada=now(),resultado=%s,monto=%s,notas=COALESCE(%s,notas) WHERE id=%s", (resultado, monto, notas, vid))
-    db.commit(); db.close()
+    db_exec("UPDATE visitas SET estado='realizada',fecha_realizada=now(),resultado=%s,monto=%s,notas=COALESCE(%s,notas) WHERE id=%s", (resultado, monto, notas, vid))
 
 def list_visitas(vendedor_id=None, estado=None, fecha=None):
-    db = get_db()
     q = "SELECT v.*,b.nombre as barraca_nombre,b.latitude,b.longitude,u.nombre as vendedor_nombre FROM visitas v JOIN barracas b ON b.id=v.barraca_id JOIN usuarios u ON u.id=v.vendedor_id"
     c, p = [], []
     if vendedor_id: c.append("v.vendedor_id=%s"); p.append(vendedor_id)
@@ -145,9 +154,11 @@ def list_visitas(vendedor_id=None, estado=None, fecha=None):
     if fecha: c.append("date(v.fecha_planificada)=%s"); p.append(fecha)
     if c: q += " WHERE " + " AND ".join(c)
     q += " ORDER BY v.fecha_planificada DESC"
-    rows = db.execute(q, p).fetchall(); db.close()
-    return [dict(r) for r in rows]
+    return db_fetchall(q, p) if p else db_fetchall(q)
 
+# =============================================
+#  RUTAS (Haversine)
+# =============================================
 # =============================================
 #  RUTAS (Haversine)
 # =============================================
@@ -193,7 +204,8 @@ def geocodificar(nombre, ciudad=""):
 
 def geocodificar_todas():
     db = get_db()
-    rows = db.execute("SELECT id,nombre,ciudad,departamento FROM barracas WHERE activa=true AND (latitude IS NULL OR longitude IS NULL)").fetchall()
+    cur = db.cursor()
+    rows = cur.execute("SELECT id,nombre,ciudad,departamento FROM barracas WHERE activa=true AND (latitude IS NULL OR longitude IS NULL)").fetchall()
     db.close()
     geo, err = 0, 0
     for row in rows:
@@ -246,7 +258,7 @@ def scrape_cafpadu():
     for link in all_links:
         nombre = link.split("/listing/")[1].rstrip("/").replace("-", " ").title()
         db = get_db()
-        existing = db.execute("SELECT id FROM barracas WHERE nombre=%s AND activa=true", (nombre,)).fetchone()
+        existing = cur.execute("SELECT id FROM barracas WHERE nombre=%s AND activa=true", (nombre,)).fetchone()
         if existing: skipped += 1; db.close(); continue
         db.close()
         detail = scrape_detail_page(link, headers)
@@ -428,7 +440,7 @@ async def admin_import_csv(request: Request):
             nombre = row.get("nombre","").strip()
             if not nombre: continue
             db = get_db()
-            existing = db.execute("SELECT id FROM barracas WHERE nombre=%s AND activa=true", (nombre,)).fetchone()
+            existing = cur.execute("SELECT id FROM barracas WHERE nombre=%s AND activa=true", (nombre,)).fetchone()
             if existing: db.close(); continue
             db.close()
             data = {"nombre":nombre,"direccion":row.get("direccion","").strip() or None,"ciudad":row.get("ciudad","").strip() or None,"departamento":row.get("departamento","").strip() or None,"telefono":row.get("telefono","").strip() or None,"contacto":row.get("contacto","").strip() or None,"web":row.get("web","").strip() or None,"facebook":row.get("facebook","").strip() or None,"instagram":row.get("instagram","").strip() or None,"twitter":row.get("twitter","").strip() or None,"whatsapp":row.get("whatsapp","").strip() or None,"youtube":row.get("youtube","").strip() or None,"notas":row.get("notas","").strip() or None}
