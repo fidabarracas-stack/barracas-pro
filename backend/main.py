@@ -238,41 +238,57 @@ def geocodificar_todas():
 
 def scrape_cafpadu():
     base_url = "https://cafpadu.com.uy/listing-category/barracas/"
-    headers = {"User-Agent": "Mozilla/5.0"}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
+        "Accept-Encoding": "identity",
+        "Connection": "keep-alive",
+    }
     all_links, page = [], 1
     while page <= 20:
         url = f"{base_url}page/{page}/" if page > 1 else base_url
         try:
             req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=15) as resp: html = resp.read().decode("utf-8", errors="ignore")
-        except: break
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                html = resp.read().decode("utf-8", errors="ignore")
+        except Exception as e:
+            print(f"  Error pagina {page}: {e}")
+            break
         links = re.findall(r'href="(https://cafpadu\.com\.uy/listing/[^/"]+/)"', html)
         if not links: break
         new_links = [l for l in links if l not in all_links]
         if not new_links: break
         all_links.extend(new_links)
         if 'rel="next"' not in html: break
-        page += 1; time.sleep(0.5)
+        page += 1
+        time.sleep(1)
     
     saved, skipped = 0, 0
     for link in all_links:
         nombre = link.split("/listing/")[1].rstrip("/").replace("-", " ").title()
-        db = get_db()
-        existing = cur.execute("SELECT id FROM barracas WHERE nombre=%s AND activa=true", (nombre,)).fetchone()
-        if existing: skipped += 1; db.close(); continue
-        db.close()
+        existing = db_fetchone("SELECT id FROM barracas WHERE nombre=%s AND activa=true", (nombre,))
+        if existing:
+            skipped += 1
+            continue
         detail = scrape_detail_page(link, headers)
         detail["nombre"] = nombre
-        create_barraca(detail); saved += 1; time.sleep(0.3)
+        create_barraca(detail)
+        saved += 1
+        time.sleep(0.5)
     return saved, len(all_links), skipped
 
 def scrape_detail_page(url, headers):
     data = {}
     try:
         req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=10) as resp: html = resp.read().decode("utf-8", errors="ignore")
-    except: return data
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            html = resp.read().decode("utf-8", errors="ignore")
+    except Exception as e:
+        print(f"  Error scrapeando {url}: {e}")
+        return data
     
+    # Telefonos
     tels = re.findall(r'href="tel:([^"]+)"', html)
     if tels:
         telefonos = []
@@ -281,11 +297,14 @@ def scrape_detail_page(url, headers):
             if tel and len(tel) >= 7: telefonos.append(tel)
         if telefonos: data["telefono"] = " / ".join(telefonos[:3])
     
+    # Web
     web = re.search(r'href="(https?://(?!.*cafpadu|.*facebook|.*twitter|.*instagram|.*youtube|.*whatsapp|.*google\.com/maps)[^"]+)"', html)
     if web:
         w = web.group(1).strip("/")
-        if not any(x in w for x in ["facebook","twitter","instagram","youtube","whatsapp","google.com/maps"]): data["web"] = w
+        if not any(x in w for x in ["facebook","twitter","instagram","youtube","whatsapp","google.com/maps"]):
+            data["web"] = w
     
+    # Redes sociales
     fb = re.search(r'href="(https?://(?:www\.)?facebook\.com/[^"]+)"', html)
     if fb and "sharer" not in fb.group(1): data["facebook"] = fb.group(1)
     ig = re.search(r'href="(https?://(?:www\.)?instagram\.com/[^"]+)"', html)
@@ -297,17 +316,20 @@ def scrape_detail_page(url, headers):
     yt = re.search(r'href="(https?://(?:www\.)?(?:youtube|youtu\.be)/[^"]+)"', html)
     if yt: data["youtube"] = yt.group(1)
     
+    # Coordenadas de Google Maps
     gmap = re.search(r'maps\?daddr=(-?\d+\.\d+),(-?\d+\.\d+)', html)
     if not gmap: gmap = re.search(r'q=(-?\d+\.\d+),(-?\d+\.\d+)', html)
     if gmap:
         try: data["latitude"] = float(gmap.group(1)); data["longitude"] = float(gmap.group(2))
         except: pass
     
+    # Geocodificar si no hay coordenadas
     if not data.get("latitude"):
-        lat, lon, ciudad = geocodificar(data["nombre"])
+        lat, lon, ciudad = geocodificar(data.get("nombre",""))
         if lat: data["latitude"] = lat; data["longitude"] = lon
         if ciudad: data["ciudad"] = ciudad
     
+    # Direccion
     addr = re.search(r'class="[^"]*lp-details-address[^"]*"[^>]*>([^<]+)<', html, re.I)
     if not addr: addr = re.search(r'class="[^"]*listing-address[^"]*"[^>]*>([^<]+)<', html, re.I)
     if addr:
